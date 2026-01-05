@@ -1,0 +1,714 @@
+"""
+First tab: UI to add and visualize talhoes as a navigable map.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+
+from ..services.kmz_loader import FieldGeometry, KMZLoader
+from .base_page import BasePage
+
+
+FIELD_FORM_DEFAULTS = {
+    "nome": "TESTE 1",
+    "municipio": "Nao informado",
+    "cultivo": "Soja",
+    "argila": "13%",
+    "ph": "4.7",
+    "indice_smp": "6.7",
+    "p": "2.6",
+    "k": "21",
+    "mo": "0.6",
+    "al": "0.6",
+    "ca": "0.3",
+    "mg": "0.2",
+    "h_al": "2.0",
+    "ctc": "2.5",
+    "sat_bases": "22",
+    "sat_al": "51.7",
+    "ca_mg": "1.5",
+    "ca_k": "6",
+    "mg_k": "3.7",
+    "s": "2.8",
+    "zn": "0.3",
+    "cu": "0.5",
+    "b": "0.1",
+    "mn": "4",
+}
+
+CULTIVO_OPTIONS = ("Soja", "Milho", "Trigo", "Aveia", "Azevem")
+
+
+@dataclass
+class FieldFormResult:
+    file_path: str
+    nome: str
+    cultivo: str
+    municipio: str
+    attributes: dict[str, str]
+
+
+class AddFieldsPage(BasePage):
+    """Load KMZ/KML files, list talhoes, and draw them on the canvas."""
+
+    title = "Adicionar talhoes"
+    CANVAS_BG = "#fff4d6"
+    FIELD_COLORS = ("#9ad19a", "#7ab5d3", "#f4b183", "#c9b8ff", "#f8d25c")
+    SIDEBAR_WIDTH = 440
+
+    def __init__(self, parent: ttk.Frame, app) -> None:
+        super().__init__(parent, app)
+        self.fields: list[FieldGeometry] = []
+        self.selected_index: int | None = None
+        self.zoom_level: float = 1.0
+        self.pan_x: float = 0.0
+        self.pan_y: float = 0.0
+        self.status_var = tk.StringVar(value="Nenhum talhao carregado.")
+        self.total_area_var = tk.StringVar(value="Area total: 0.00 ha")
+        self.selected_area_var = tk.StringVar(value="Area selecionada: 0.00 ha")
+        self.municipality_var = tk.StringVar(value="Municipio: Nao informado")
+        self.sidebar_canvas: tk.Canvas | None = None
+        self._drag_origin: tuple[float, float, float, float] | None = None
+        self._dragging = False
+
+    def build(self) -> None:
+        self.style = ttk.Style()
+        self.style.configure("Card.TFrame", relief="ridge", borderwidth=1)
+        self.style.configure(
+            "CardSelected.TFrame",
+            relief="solid",
+            borderwidth=2,
+            background="#eaf4ff",
+        )
+
+        self.container = ttk.Frame(self.parent)
+        self.container.pack(fill="both", expand=True)
+        self.container.rowconfigure(0, weight=1)
+        self.container.columnconfigure(0, weight=1)
+        self.container.columnconfigure(1, weight=0)
+
+        self._build_canvas_area()
+        self._build_sidebar()
+
+        self.parent.after(100, self._draw_placeholder)
+
+    def _build_canvas_area(self) -> None:
+        canvas_holder = ttk.Frame(self.container, padding=(20, 12, 12, 12))
+        canvas_holder.grid(row=0, column=0, sticky="nsew")
+        canvas_holder.rowconfigure(1, weight=1)
+        canvas_holder.columnconfigure(0, weight=1)
+
+        self.top_info = ttk.Frame(canvas_holder)
+        self.top_info.grid(row=0, column=0, sticky="ew", pady=(8, 8))
+        self.top_info.columnconfigure(0, weight=1)
+        self.top_info.columnconfigure(1, weight=1)
+        ttk.Label(
+            self.top_info,
+            textvariable=self.total_area_var,
+            anchor="w",
+            font=("Segoe UI", 10, "bold"),
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            self.top_info,
+            textvariable=self.selected_area_var,
+            anchor="e",
+            font=("Segoe UI", 10),
+        ).grid(row=0, column=1, sticky="e")
+
+        self.canvas = tk.Canvas(
+            canvas_holder,
+            background=self.CANVAS_BG,
+            highlightthickness=0,
+            borderwidth=0,
+        )
+        self.canvas.grid(row=1, column=0, sticky="nsew")
+        self.canvas.bind("<Configure>", lambda event: self._render_fields())
+        self.canvas.bind("<MouseWheel>", self._on_canvas_scroll)
+        self.canvas.bind("<Button-4>", self._on_canvas_scroll)  # Linux scroll up
+        self.canvas.bind("<Button-5>", self._on_canvas_scroll)  # Linux scroll down
+        self.canvas.bind("<ButtonPress-1>", self._start_pan, add="+")
+        self.canvas.bind("<B1-Motion>", self._pan_motion, add="+")
+        self.canvas.bind("<ButtonRelease-1>", self._end_pan, add="+")
+        self.canvas.tag_bind("field", "<ButtonRelease-1>", self._on_canvas_click)
+        self.canvas.tag_bind("label", "<ButtonRelease-1>", self._on_canvas_click)
+
+        self.bottom_info = ttk.Frame(canvas_holder)
+        self.bottom_info.grid(row=2, column=0, sticky="ew", pady=(8, 0))
+        ttk.Label(
+            self.bottom_info,
+            textvariable=self.municipality_var,
+            anchor="w",
+            font=("Segoe UI", 10),
+        ).grid(row=0, column=0, sticky="w")
+
+    def _build_sidebar(self) -> None:
+        wrapper = ttk.Frame(self.container, padding=(0, 16, 16, 16))
+        wrapper.grid(row=0, column=1, sticky="ns")
+        wrapper.rowconfigure(0, weight=1)
+
+        self.sidebar_canvas = tk.Canvas(
+            wrapper,
+            highlightthickness=0,
+            borderwidth=0,
+            width=self.SIDEBAR_WIDTH,
+        )
+        sidebar_scroll = ttk.Scrollbar(
+            wrapper, orient="vertical", command=self.sidebar_canvas.yview
+        )
+        self.sidebar_canvas.configure(yscrollcommand=sidebar_scroll.set)
+        self.sidebar_canvas.grid(row=0, column=0, sticky="ns", padx=(0, 8))
+        sidebar_scroll.grid(row=0, column=1, sticky="ns")
+
+        self.sidebar_inner = ttk.Frame(self.sidebar_canvas)
+        self.sidebar_canvas.create_window(
+            (0, 0),
+            window=self.sidebar_inner,
+            anchor="nw",
+            width=self.SIDEBAR_WIDTH - 4,
+        )
+        self.sidebar_inner.bind(
+            "<Configure>",
+            lambda event: self.sidebar_canvas.configure(
+                scrollregion=self.sidebar_canvas.bbox("all")
+            ),
+        )
+        self.sidebar_canvas.bind("<Enter>", self._enable_sidebar_scroll)
+        self.sidebar_canvas.bind("<Leave>", self._disable_sidebar_scroll)
+
+        self._build_sidebar_content()
+
+    def _build_sidebar_content(self) -> None:
+        cards: list[ttk.Labelframe] = []
+        cards.append(self._create_card("Inserir talhoes"))
+        ttk.Label(
+            cards[-1],
+            text="Gerencie aqui os arquivos KMZ/KML e os talhoes carregados.",
+            wraplength=self.SIDEBAR_WIDTH - 40,
+        ).pack(anchor="w", fill="x")
+        ttk.Button(
+            cards[-1],
+            text="Carregar talhao",
+            command=self._handle_import,
+            bootstyle="primary",
+        ).pack(fill="x", pady=(12, 0))
+
+        self.field_cards_frame = ttk.Frame(self.sidebar_inner)
+        self.field_cards_frame.pack(fill="both", expand=True, padx=(6, 2))
+        self.field_cards_frame.columnconfigure(0, weight=1)
+        self._refresh_field_cards()
+
+        self.status_label = ttk.Label(
+            self.sidebar_inner,
+            textvariable=self.status_var,
+            padding=(8, 4),
+            anchor="w",
+        )
+        self.status_label.pack(fill="x", padx=(6, 2))
+
+    def _create_card(self, title: str) -> ttk.Labelframe:
+        card = ttk.Labelframe(
+            self.sidebar_inner,
+            text=title,
+            padding=(14, 10),
+        )
+        card.pack(fill="x", expand=False, pady=(0, 12), padx=(6, 2))
+        return card
+
+    def _refresh_field_cards(self) -> None:
+        for child in self.field_cards_frame.winfo_children():
+            child.destroy()
+        if not self.fields:
+            ttk.Label(
+                self.field_cards_frame,
+                text="Nenhum talhao inserido.",
+                anchor="w",
+            ).grid(row=0, column=0, sticky="ew")
+            return
+        for index, field in enumerate(self.fields):
+            card = ttk.Frame(
+                self.field_cards_frame,
+                padding=8,
+                style="Card.TFrame",
+            )
+            card.pack(fill="x", pady=4)
+            card.field_index = index  # type: ignore[attr-defined]
+
+            header = ttk.Frame(card)
+            header.pack(fill="x")
+            ttk.Label(
+                header,
+                text=field.name,
+                font=("Segoe UI", 10, "bold"),
+            ).pack(side="left", anchor="w")
+            ttk.Button(
+                header,
+                text="Remover",
+                command=lambda idx=index: self._confirm_remove_field(idx),
+                bootstyle="danger-outline",
+            ).pack(side="right")
+
+            ttk.Label(
+                card,
+                text=f"Cultivo: {field.cultivation or 'Nao informado'}",
+                anchor="w",
+            ).pack(anchor="w", pady=(4, 0))
+            ttk.Label(
+                card,
+                text=f"Area: {field.area_ha:.2f} ha",
+                anchor="w",
+            ).pack(anchor="w")
+
+            self._bind_card_selection(card, index)
+
+        self._highlight_selected_card()
+
+    def _highlight_selected_card(self) -> None:
+        for card in self.field_cards_frame.winfo_children():
+            idx = getattr(card, "field_index", None)
+            if idx is None:
+                continue
+            style = "CardSelected.TFrame" if idx == self.selected_index else "Card.TFrame"
+            card.configure(style=style)
+
+    def _confirm_remove_field(self, index: int) -> None:
+        field = self.fields[index]
+        if not messagebox.askyesno(
+            "Remover talhao",
+            f"Tem certeza que deseja remover '{field.name}'?",
+        ):
+            return
+        del self.fields[index]
+        if self.selected_index == index:
+            self.selected_index = None
+        elif self.selected_index is not None and self.selected_index > index:
+            self.selected_index -= 1
+        self.status_var.set(f"{len(self.fields)} talhao(oes) carregado(s).")
+        self._update_area_labels()
+        self._refresh_field_cards()
+        self._render_fields()
+
+    def _bind_card_selection(self, widget, index: int) -> None:
+        widget.bind("<Button-1>", lambda _e, idx=index: self._select_field(idx, False))
+        for child in getattr(widget, "winfo_children", lambda: [])():
+            self._bind_card_selection(child, index)
+
+    def _enable_sidebar_scroll(self, _event) -> None:
+        if self.sidebar_canvas is None:
+            return
+        self.sidebar_canvas.bind_all("<MouseWheel>", self._on_sidebar_scroll)
+
+    def _disable_sidebar_scroll(self, _event) -> None:
+        if self.sidebar_canvas is None:
+            return
+        self.sidebar_canvas.unbind_all("<MouseWheel>")
+
+    def _on_sidebar_scroll(self, event) -> None:
+        if self.sidebar_canvas is None:
+            return
+        delta = int(-1 * (event.delta / 120))
+        self.sidebar_canvas.yview_scroll(delta, "units")
+
+    def _reset_view(self) -> None:
+        self.zoom_level = 1.0
+        self.pan_x = 0.0
+        self.pan_y = 0.0
+        self._render_fields()
+
+    # Canvas interaction -------------------------------------------------
+    def _start_pan(self, event) -> None:
+        self._drag_origin = (event.x, event.y, self.pan_x, self.pan_y)
+        self._dragging = False
+
+    def _pan_motion(self, event) -> None:
+        if not self._drag_origin:
+            return
+        start_x, start_y, initial_pan_x, initial_pan_y = self._drag_origin
+        dx = event.x - start_x
+        dy = event.y - start_y
+        if abs(dx) > 2 or abs(dy) > 2:
+            self._dragging = True
+        self.pan_x = initial_pan_x + dx
+        self.pan_y = initial_pan_y + dy
+        self._render_fields()
+
+    def _end_pan(self, _event) -> None:
+        self._drag_origin = None
+        if self._dragging:
+            self.canvas.after(50, self._clear_drag_flag)
+        else:
+            self._dragging = False
+
+    def _clear_drag_flag(self) -> None:
+        self._dragging = False
+
+    def _on_canvas_scroll(self, event) -> None:
+        if event.num == 4 or event.delta > 0:
+            self._zoom(1.15, (event.x, event.y))
+        elif event.num == 5 or event.delta < 0:
+            self._zoom(1 / 1.15, (event.x, event.y))
+
+    def _zoom(self, factor: float, anchor: tuple[float, float]) -> None:
+        if not self.fields:
+            return
+        old_zoom = self.zoom_level
+        new_zoom = min(max(old_zoom * factor, 0.2), 16.0)
+        if abs(new_zoom - old_zoom) < 1e-6:
+            return
+        width = max(self.canvas.winfo_width(), 10)
+        height = max(self.canvas.winfo_height(), 10)
+        padding = 30
+        draw_width = max(width - padding * 2, 10)
+        draw_height = max(height - padding * 2, 10)
+        center_x = padding + draw_width / 2
+        center_y = padding + draw_height / 2
+        anchor_x, anchor_y = anchor
+
+        if abs(old_zoom) < 1e-6:
+            old_zoom = 1.0
+        self.pan_x = anchor_x - center_x - (anchor_x - center_x - self.pan_x) * (
+            new_zoom / old_zoom
+        )
+        self.pan_y = anchor_y - center_y - (anchor_y - center_y - self.pan_y) * (
+            new_zoom / old_zoom
+        )
+        self.zoom_level = new_zoom
+        self._render_fields()
+
+    def _on_canvas_click(self, event) -> None:
+        if self._dragging:
+            self._dragging = False
+            return
+        current = self.canvas.find_withtag("current")
+        if not current:
+            return
+        tags = self.canvas.gettags(current)
+        for tag in tags:
+            if tag.startswith("field-"):
+                try:
+                    idx = int(tag.split("-", 1)[1])
+                except ValueError:
+                    continue
+                self._select_field(idx, sync_tree=True)
+                return
+
+    # Data handling ------------------------------------------------------
+    def _handle_import(self) -> None:
+        dialog = FieldMetadataDialog(self.parent)
+        result = dialog.show()
+        if result is None:
+            return
+
+        loaded_total = 0
+        try:
+            new_fields = KMZLoader.load_fields(result.file_path)
+        except Exception as exc:  # pylint: disable=broad-except
+            messagebox.showerror(
+                "Erro ao carregar talhao",
+                f"Arquivo: {Path(result.file_path).name}\n\nDetalhes: {exc}",
+            )
+            return
+        if not new_fields:
+            messagebox.showwarning(
+                "Sem poligonos encontrados",
+                f"Nenhum poligono foi detectado em {Path(result.file_path).name}.",
+            )
+            return
+
+        for idx, field in enumerate(new_fields, start=1):
+            suffix = f" #{idx}" if len(new_fields) > 1 else ""
+            field.name = f"{result.nome}{suffix}"
+            field.cultivation = result.cultivo
+            field.municipality = result.municipio or "Nao informado"
+            field.metadata = result.attributes | {
+                "nome": field.name,
+                "cultivo": result.cultivo,
+                "municipio": field.municipality,
+                "arquivo": Path(result.file_path).name,
+            }
+        self.fields.extend(new_fields)
+        loaded_total = len(new_fields)
+
+        if loaded_total:
+            self.status_var.set(f"{len(self.fields)} talhao(oes) carregado(s).")
+            self.selected_index = None
+            self._update_area_labels()
+            self._refresh_field_cards()
+            self._reset_view()
+
+    def _select_field(self, index: int | None, _sync_tree: bool = False) -> None:
+        if index is None or index < 0 or index >= len(self.fields):
+            self.selected_index = None
+        else:
+            self.selected_index = index
+        self._update_area_labels()
+        self._highlight_selected_card()
+        self._render_fields()
+
+    def _update_area_labels(self) -> None:
+        total = sum(field.area_ha for field in self.fields)
+        self.total_area_var.set(f"Area total: {total:.2f} ha")
+        if self.selected_index is not None and 0 <= self.selected_index < len(self.fields):
+            selected_field = self.fields[self.selected_index]
+            self.selected_area_var.set(f"Area selecionada: {selected_field.area_ha:.2f} ha")
+            municipality = selected_field.municipality or "Nao informado"
+            self.municipality_var.set(f"Municipio: {municipality}")
+        else:
+            self.selected_area_var.set("Area selecionada: 0.00 ha")
+            self.municipality_var.set("Municipio: Selecione um talhao")
+
+    # Drawing ------------------------------------------------------------
+    def _draw_placeholder(self) -> None:
+        self.canvas.delete("placeholder")
+        width = max(self.canvas.winfo_width(), 200)
+        height = max(self.canvas.winfo_height(), 200)
+        self.canvas.create_text(
+            width / 2,
+            height / 2,
+            text="Carregue arquivos KMZ/KML\npara visualizar os talhoes.",
+            fill="#8d8d8d",
+            font=("Segoe UI", 13),
+            tags="placeholder",
+            justify="center",
+        )
+
+    def _render_fields(self) -> None:
+        self.canvas.delete("field")
+        self.canvas.delete("label")
+        if not self.fields:
+            self._draw_placeholder()
+            return
+
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        if width <= 20 or height <= 20:
+            return
+
+        all_points = [
+            point for field in self.fields for point in field.coordinates if point
+        ]
+        if not all_points:
+            self._draw_placeholder()
+            return
+
+        latitudes = [lat for lat, _ in all_points]
+        longitudes = [lon for _, lon in all_points]
+        min_lat, max_lat = min(latitudes), max(latitudes)
+        min_lon, max_lon = min(longitudes), max(longitudes)
+        lat_range = max(max_lat - min_lat, 1e-6)
+        lon_range = max(max_lon - min_lon, 1e-6)
+
+        padding = 30
+        draw_width = max(width - padding * 2, 10)
+        draw_height = max(height - padding * 2, 10)
+        center_x = padding + draw_width / 2
+        center_y = padding + draw_height / 2
+
+        for index, field in enumerate(self.fields):
+            if not field.coordinates:
+                continue
+            projected = [
+                (
+                    padding + (lon - min_lon) / lon_range * draw_width,
+                    height
+                    - (
+                        padding + (lat - min_lat) / lat_range * draw_height
+                    ),
+                )
+                for lat, lon in field.coordinates
+            ]
+            adjusted = [
+                (
+                    center_x + (x - center_x) * self.zoom_level + self.pan_x,
+                    center_y + (y - center_y) * self.zoom_level + self.pan_y,
+                )
+                for x, y in projected
+            ]
+            flat = [coord for point in adjusted for coord in point]
+            color = self.FIELD_COLORS[index % len(self.FIELD_COLORS)]
+            is_selected = index == self.selected_index
+            outline = "#2c3e50" if is_selected else "#7f8c8d"
+            width_px = 3 if is_selected else 1.5
+            fill = color if is_selected else self._lighten(color, 0.55)
+            self.canvas.create_polygon(
+                *flat,
+                fill=fill,
+                outline=outline,
+                width=width_px,
+                tags=("field", f"field-{index}"),
+                smooth=False,
+            )
+            centroid_x = sum(point[0] for point in adjusted) / len(adjusted)
+            centroid_y = sum(point[1] for point in adjusted) / len(adjusted)
+            self.canvas.create_text(
+                centroid_x,
+                centroid_y,
+                text=field.name,
+                fill="#2f3640",
+                font=("Segoe UI", 10, "bold"),
+                tags=("label", f"field-{index}"),
+            )
+
+    @staticmethod
+    def _lighten(color: str, factor: float) -> str:
+        """Return a lighter version of ``color``."""
+        color = color.lstrip("#")
+        if len(color) != 6:
+            return color
+        r = int(color[0:2], 16)
+        g = int(color[2:4], 16)
+        b = int(color[4:6], 16)
+        r = int(r + (255 - r) * factor)
+        g = int(g + (255 - g) * factor)
+        b = int(b + (255 - b) * factor)
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+
+class FieldMetadataDialog:
+    """Modal dialog to collect talhao metadata before loading KMZ/KML."""
+
+    def __init__(self, master) -> None:
+        self.master = master
+        self.result: FieldFormResult | None = None
+        self._entries: dict[str, tk.StringVar] = {}
+        self._file_var = tk.StringVar(value="")
+
+    def show(self) -> FieldFormResult | None:
+        self.window = tk.Toplevel(self.master)
+        self.window.title("Novo talhao")
+        self.window.transient(self.master.winfo_toplevel())
+        self.window.grab_set()
+
+        frame = ttk.Frame(self.window, padding=20)
+        frame.grid(row=0, column=0, sticky="nsew")
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(0, weight=1)
+
+        row = 0
+        row = self._add_entry(frame, row, "nome", "Nome do talhao")
+        row = self._add_entry(frame, row, "municipio", "Municipio")
+
+        ttk.Label(frame, text="Cultivo").grid(row=row, column=0, sticky="w", pady=(8, 2))
+        cultivo_var = tk.StringVar(value=FIELD_FORM_DEFAULTS["cultivo"])
+        cultivo_cb = ttk.Combobox(
+            frame,
+            textvariable=cultivo_var,
+            values=CULTIVO_OPTIONS,
+            state="readonly",
+        )
+        cultivo_cb.grid(row=row, column=1, sticky="ew", pady=(8, 2))
+        self._entries["cultivo"] = cultivo_var
+        row += 1
+
+        ttk.Separator(frame).grid(row=row, column=0, columnspan=2, pady=12, sticky="ew")
+        row += 1
+
+        ttk.Label(frame, text="Analises de solo").grid(row=row, column=0, columnspan=2, sticky="w")
+        row += 1
+        analysis_fields = [
+            ("argila", "Argila"),
+            ("ph", "pH"),
+            ("indice_smp", "Indice SMP"),
+            ("p", "P"),
+            ("k", "K"),
+            ("mo", "M.O"),
+            ("al", "Al"),
+            ("ca", "Ca"),
+            ("mg", "Mg"),
+            ("h_al", "H + Al"),
+            ("ctc", "CTC"),
+            ("sat_bases", "% Sat Bases"),
+            ("sat_al", "% Sat Al"),
+            ("ca_mg", "Ca/Mg"),
+            ("ca_k", "Ca/K"),
+            ("mg_k", "Mg/K"),
+            ("s", "S"),
+            ("zn", "Zn"),
+            ("cu", "Cu"),
+            ("b", "B"),
+            ("mn", "Mn"),
+        ]
+
+        for key, label in analysis_fields:
+            row = self._add_entry(frame, row, key, label)
+
+        ttk.Label(frame, text="Arquivo KMZ/KML").grid(row=row, column=0, sticky="w", pady=(12, 2))
+        file_row = ttk.Frame(frame)
+        file_row.grid(row=row, column=1, sticky="ew", pady=(12, 2))
+        file_row.columnconfigure(0, weight=1)
+        ttk.Entry(file_row, textvariable=self._file_var, state="readonly").grid(
+            row=0, column=0, sticky="ew"
+        )
+        ttk.Button(file_row, text="Escolher", command=self._choose_file).grid(row=0, column=1, padx=(6, 0))
+        row += 1
+
+        button_row = ttk.Frame(frame)
+        button_row.grid(row=row, column=0, columnspan=2, pady=(16, 0), sticky="e")
+        ttk.Button(button_row, text="Cancelar", command=self._on_cancel).pack(side="right", padx=(6, 0))
+        ttk.Button(button_row, text="Inserir talhao", command=self._on_submit, bootstyle="primary").pack(side="right")
+
+        frame.columnconfigure(1, weight=1)
+        self.window.update_idletasks()
+        self._center_window()
+        self.master.wait_window(self.window)
+        return self.result
+
+    def _add_entry(self, parent: ttk.Frame, row: int, key: str, label: str) -> int:
+        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=(4, 2))
+        var = tk.StringVar(value=FIELD_FORM_DEFAULTS.get(key, ""))
+        entry = ttk.Entry(parent, textvariable=var)
+        entry.grid(row=row, column=1, sticky="ew", pady=(4, 2))
+        self._entries[key] = var
+        return row + 1
+
+    def _choose_file(self) -> None:
+        file_path = filedialog.askopenfilename(
+            title="Selecione arquivo KMZ ou KML",
+            filetypes=(("Arquivos KMZ", "*.kmz"), ("Arquivos KML", "*.kml")),
+        )
+        if file_path:
+            self._file_var.set(file_path)
+
+    def _on_cancel(self) -> None:
+        self.result = None
+        self.window.destroy()
+
+    def _on_submit(self) -> None:
+        if not self._file_var.get():
+            messagebox.showwarning("Arquivo obrigatório", "Selecione um arquivo KMZ/KML.")
+            return
+        nome = self._entries["nome"].get().strip() or FIELD_FORM_DEFAULTS["nome"]
+        cultivo = self._entries["cultivo"].get().strip() or FIELD_FORM_DEFAULTS["cultivo"]
+        municipio = self._entries["municipio"].get().strip() or "Nao informado"
+        attributes = {
+            key: var.get().strip()
+            for key, var in self._entries.items()
+            if key not in {"nome", "cultivo", "municipio"}
+        }
+        self.result = FieldFormResult(
+            file_path=self._file_var.get(),
+            nome=nome,
+            cultivo=cultivo,
+            municipio=municipio,
+            attributes=attributes,
+        )
+        self.window.destroy()
+
+    def _center_window(self) -> None:
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        master_geo = self.master.winfo_toplevel().geometry()
+        try:
+            _, rest = master_geo.split("+", 1)
+            mx, my = rest.split("+")
+            mx, my = int(mx), int(my)
+        except ValueError:
+            mx = self.master.winfo_rootx()
+            my = self.master.winfo_rooty()
+        x = mx + (self.master.winfo_width() // 2) - width // 2
+        y = my + (self.master.winfo_height() // 2) - height // 2
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
