@@ -17,6 +17,7 @@ FIELD_FORM_DEFAULTS = {
     "nome": "TESTE 1",
     "municipio": "Nao informado",
     "cultivo": "Soja",
+    "produtividade": "60 sc/ha",
     "argila": "13%",
     "ph": "4.7",
     "indice_smp": "6.7",
@@ -40,6 +41,67 @@ FIELD_FORM_DEFAULTS = {
     "mn": "4",
 }
 
+NEED_FORM_DEFAULTS = {
+    "nome": "Necessidade teste",
+    "municipio": "Nao informado",
+    "cultivo": "Soja",
+    "produtividade": "60 sc/ha",
+    "argila": "13%",
+    "ph": "4.7",
+    "indice_smp": "6.7",
+    "al": "0.6",
+    "ca": "0.3",
+    "mg": "0.2",
+    "h_al": "2.0",
+    "sat_bases": "22",
+    "sat_al": "51.7",
+    "n": "100",
+    "p": "160",
+    "k": "160",
+}
+
+SOIL_ANALYSIS_FIELDS = [
+    ("argila", "Argila"),
+    ("ph", "pH"),
+    ("indice_smp", "Indice SMP"),
+    ("p", "P"),
+    ("k", "K"),
+    ("mo", "M.O"),
+    ("al", "Al"),
+    ("ca", "Ca"),
+    ("mg", "Mg"),
+    ("h_al", "H + Al"),
+    ("ctc", "CTC"),
+    ("sat_bases", "% Sat Bases"),
+    ("sat_al", "% Sat Al"),
+    ("ca_mg", "Ca/Mg"),
+    ("ca_k", "Ca/K"),
+    ("mg_k", "Mg/K"),
+    ("s", "S"),
+    ("zn", "Zn"),
+    ("cu", "Cu"),
+    ("b", "B"),
+    ("mn", "Mn"),
+]
+
+NEED_LIME_FIELDS = [
+    ("argila", "Argila"),
+    ("ph", "pH"),
+    ("indice_smp", "Indice SMP"),
+    ("al", "Al"),
+    ("ca", "Ca"),
+    ("mg", "Mg"),
+    ("h_al", "H + Al"),
+    ("sat_bases", "% Sat Bases"),
+    ("sat_al", "% Sat Al"),
+]
+
+NEED_NPK_FIELDS = [
+    ("n", "N"),
+    ("p", "P"),
+    ("k", "K"),
+]
+
 CULTIVO_OPTIONS = ("Soja", "Milho", "Trigo", "Aveia", "Azevem")
 
 
@@ -49,28 +111,32 @@ class FieldFormResult:
     nome: str
     cultivo: str
     municipio: str
+    produtividade: str
+    mode: str
     attributes: dict[str, str]
+
+
+SHARED_FIELDS: list[FieldGeometry] = []
 
 
 class AddFieldsPage(BasePage):
     """Load KMZ/KML files, list talhoes, and draw them on the canvas."""
 
-    title = "Adicionar Talhões"
+    title = "Adicionar talhoes"
     CANVAS_BG = "#fff4d6"
     FIELD_COLORS = ("#9ad19a", "#7ab5d3", "#f4b183", "#c9b8ff", "#f8d25c")
     SIDEBAR_WIDTH = 480
 
     def __init__(self, parent: ttk.Frame, app) -> None:
         super().__init__(parent, app)
-        self.fields: list[FieldGeometry] = []
+        self.fields: list[FieldGeometry] = SHARED_FIELDS
         self.selected_index: int | None = None
         self.zoom_level: float = 1.0
         self.pan_x: float = 0.0
         self.pan_y: float = 0.0
-        self.status_var = tk.StringVar(value="Nenhum talhão carregado.")
-        self.total_area_var = tk.StringVar(value="Área total: 0.00 ha")
-        self.selected_area_var = tk.StringVar(value="Área selecionada: 0.00 ha")
-        self.municipality_var = tk.StringVar(value="Município: Não informado")
+        self.status_var = tk.StringVar(value="Nenhum talhao carregado.")
+        self.total_area_var = tk.StringVar(value="Area total: 0.00 ha")
+        self.municipality_var = tk.StringVar(value="Municipio: Nao informado")
         self.sidebar_canvas: tk.Canvas | None = None
         self._drag_origin: tuple[float, float, float, float] | None = None
         self._dragging = False
@@ -110,19 +176,12 @@ class AddFieldsPage(BasePage):
         self.top_info = ttk.Frame(canvas_holder)
         self.top_info.grid(row=0, column=0, sticky="ew", pady=(8, 8))
         self.top_info.columnconfigure(0, weight=1)
-        self.top_info.columnconfigure(1, weight=1)
         ttk.Label(
             self.top_info,
             textvariable=self.total_area_var,
             anchor="w",
             font=("Segoe UI", 10, "bold"),
         ).grid(row=0, column=0, sticky="w")
-        ttk.Label(
-            self.top_info,
-            textvariable=self.selected_area_var,
-            anchor="e",
-            font=("Segoe UI", 10),
-        ).grid(row=0, column=1, sticky="e")
 
         self.canvas = tk.Canvas(
             canvas_holder,
@@ -402,7 +461,14 @@ class AddFieldsPage(BasePage):
 
     # Data handling ------------------------------------------------------
     def _handle_import(self) -> None:
-        dialog = FieldMetadataDialog(self.parent)
+        mode_choice = FieldModeDialog(self.parent).show()
+        if mode_choice is None:
+            return
+        if mode_choice == "soil":
+            dialog: BaseFormDialog = FieldMetadataDialog(self.parent)
+        else:
+            dialog = FertilizationNeedDialog(self.parent)
+
         result = dialog.show()
         if result is None:
             return
@@ -428,11 +494,13 @@ class AddFieldsPage(BasePage):
             field.name = f"{result.nome}{suffix}"
             field.cultivation = result.cultivo
             field.municipality = result.municipio or "Nao informado"
+            field.productivity = result.produtividade or None
             field.metadata = result.attributes | {
                 "nome": field.name,
                 "cultivo": result.cultivo,
                 "municipio": field.municipality,
                 "arquivo": Path(result.file_path).name,
+                "modo": result.mode,
             }
         self.fields.extend(new_fields)
         loaded_total = len(new_fields)
@@ -458,11 +526,9 @@ class AddFieldsPage(BasePage):
         self.total_area_var.set(f"Area total: {total:.2f} ha")
         if self.selected_index is not None and 0 <= self.selected_index < len(self.fields):
             selected_field = self.fields[self.selected_index]
-            self.selected_area_var.set(f"Area selecionada: {selected_field.area_ha:.2f} ha")
             municipality = selected_field.municipality or "Nao informado"
             self.municipality_var.set(f"Municipio: {municipality}")
         else:
-            self.selected_area_var.set("Area selecionada: 0.00 ha")
             self.municipality_var.set("Municipio: Selecione um talhao")
 
     # Drawing ------------------------------------------------------------
@@ -534,11 +600,11 @@ class AddFieldsPage(BasePage):
                 for x, y in projected
             ]
             flat = [coord for point in adjusted for coord in point]
-            color = self.FIELD_COLORS[index % len(self.FIELD_COLORS)]
+            color = self._field_color(field, index)
             is_selected = index == self.selected_index
             outline = "#2c3e50" if is_selected else "#7f8c8d"
             width_px = 3 if is_selected else 1.5
-            fill = color if is_selected else self._lighten(color, 0.55)
+            fill = self._field_fill_color(color, is_selected)
             self.canvas.create_polygon(
                 *flat,
                 fill=fill,
@@ -558,6 +624,12 @@ class AddFieldsPage(BasePage):
                 tags=("label", f"field-{index}"),
             )
 
+    def _field_color(self, field: FieldGeometry, index: int) -> str:
+        return self.FIELD_COLORS[index % len(self.FIELD_COLORS)]
+
+    def _field_fill_color(self, base_color: str, is_selected: bool) -> str:
+        return base_color if is_selected else self._lighten(base_color, 0.55)
+
     @staticmethod
     def _lighten(color: str, factor: float) -> str:
         """Return a lighter version of ``color``."""
@@ -572,12 +644,88 @@ class AddFieldsPage(BasePage):
         b = int(b + (255 - b) * factor)
         return f"#{r:02x}{g:02x}{b:02x}"
 
-
-class FieldMetadataDialog:
-    """Modal dialog to collect talhao metadata before loading KMZ/KML."""
+class FieldModeDialog:
+    """Prompt user to escolher o tipo de insercao."""
 
     def __init__(self, master) -> None:
         self.master = master
+        self.choice: str | None = None
+
+    def show(self) -> str | None:
+        self.window = tk.Toplevel(self.master)
+        self.window.title("Tipo de insercao")
+        self.window.transient(self.master.winfo_toplevel())
+        self.window.grab_set()
+
+        frame = ttk.Frame(self.window, padding=20)
+        frame.pack(fill="both", expand=True)
+
+        ttk.Label(
+            frame,
+            text="Como deseja inserir o talhao?",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(anchor="w", pady=(0, 10))
+
+        ttk.Button(
+            frame,
+            text="Adicionar analise de solo completa",
+            command=lambda: self._select("soil"),
+            padding=10,
+            bootstyle="primary",
+        ).pack(fill="x", pady=6)
+        ttk.Button(
+            frame,
+            text="Adicionar necessidade de adubacao",
+            command=lambda: self._select("need"),
+            padding=10,
+        ).pack(fill="x", pady=6)
+        ttk.Button(frame, text="Cancelar", command=self._cancel).pack(pady=(12, 0))
+
+        self._center_window()
+        self.master.wait_window(self.window)
+        return self.choice
+
+    def _select(self, value: str) -> None:
+        self.choice = value
+        self.window.destroy()
+
+    def _cancel(self) -> None:
+        self.choice = None
+        self.window.destroy()
+
+    def _center_window(self) -> None:
+        self.window.update_idletasks()
+        width = self.window.winfo_width()
+        height = self.window.winfo_height()
+        master_geo = self.master.winfo_toplevel().geometry()
+        try:
+            _, rest = master_geo.split('+', 1)
+            mx, my = rest.split('+')
+            mx, my = int(mx), int(my)
+        except ValueError:
+            mx = self.master.winfo_rootx()
+            my = self.master.winfo_rooty()
+        x = mx + (self.master.winfo_width() // 2) - width // 2
+        y = my + (self.master.winfo_height() // 2) - height // 2
+        self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+class BaseFormDialog:
+    """Base class for as janelas de cadastro de talhoes."""
+
+    def __init__(
+        self,
+        master,
+        title: str,
+        defaults: dict[str, str],
+        sections: list[tuple[str, list[tuple[str, str]]]],
+        mode: str,
+    ) -> None:
+        self.master = master
+        self.title = title
+        self.defaults = defaults
+        self.sections = sections
+        self.mode = mode
         self.result: FieldFormResult | None = None
         self._entries: dict[str, tk.StringVar] = {}
         self._file_var = tk.StringVar(value="")
@@ -588,10 +736,9 @@ class FieldMetadataDialog:
 
     def show(self) -> FieldFormResult | None:
         self.window = tk.Toplevel(self.master)
-        self.window.title("Novo talhao")
+        self.window.title(self.title)
         self.window.transient(self.master.winfo_toplevel())
         self.window.grab_set()
-
         self.window.geometry("600x600")
         self.window.minsize(520, 520)
 
@@ -631,35 +778,12 @@ class FieldMetadataDialog:
         self._add_entry("nome", "Nome do talhao", full_width=True)
         self._add_entry("municipio", "Municipio", full_width=True)
         self._add_combobox("cultivo", "Cultivo", CULTIVO_OPTIONS, full_width=True)
+        self._add_entry("produtividade", "Produtividade esperada", full_width=True)
 
-        self._add_separator(frame, "Analises de solo")
-
-        analysis_fields = [
-            ("argila", "Argila"),
-            ("ph", "pH"),
-            ("indice_smp", "Indice SMP"),
-            ("p", "P"),
-            ("k", "K"),
-            ("mo", "M.O"),
-            ("al", "Al"),
-            ("ca", "Ca"),
-            ("mg", "Mg"),
-            ("h_al", "H + Al"),
-            ("ctc", "CTC"),
-            ("sat_bases", "% Sat Bases"),
-            ("sat_al", "% Sat Al"),
-            ("ca_mg", "Ca/Mg"),
-            ("ca_k", "Ca/K"),
-            ("mg_k", "Mg/K"),
-            ("s", "S"),
-            ("zn", "Zn"),
-            ("cu", "Cu"),
-            ("b", "B"),
-            ("mn", "Mn"),
-        ]
-
-        for key, label in analysis_fields:
-            self._add_entry(key, label)
+        for title, fields in self.sections:
+            self._add_separator(title)
+            for key, label in fields:
+                self._add_entry(key, label)
 
         ttk.Label(frame, text="Arquivo KMZ/KML").grid(
             row=self._grid_row,
@@ -704,13 +828,13 @@ class FieldMetadataDialog:
         def widget_factory():
             return ttk.Entry(self._form_frame, textvariable=var)
 
-        var = tk.StringVar(value=FIELD_FORM_DEFAULTS.get(key, ""))
+        var = tk.StringVar(value=self.defaults.get(key, ""))
         entry = self._place_field(label, widget_factory, full_width)
         entry.configure(textvariable=var)
         self._entries[key] = var
 
     def _add_combobox(self, key: str, label: str, values: tuple[str, ...], full_width: bool = False) -> None:
-        var = tk.StringVar(value=FIELD_FORM_DEFAULTS.get(key, values[0]))
+        var = tk.StringVar(value=self.defaults.get(key, values[0]))
 
         def widget_factory():
             return ttk.Combobox(
@@ -768,8 +892,11 @@ class FieldMetadataDialog:
                 self._grid_row += 1
         return widget
 
-    def _add_separator(self, parent: ttk.Frame, label: str) -> None:
-        ttk.Separator(parent).grid(
+    def _add_separator(self, label: str) -> None:
+        form = self._form_frame
+        if form is None:
+            return
+        ttk.Separator(form).grid(
             row=self._grid_row,
             column=0,
             columnspan=self._form_columns * 2,
@@ -777,7 +904,7 @@ class FieldMetadataDialog:
             sticky="ew",
         )
         self._grid_row += 1
-        ttk.Label(parent, text=label).grid(
+        ttk.Label(form, text=label).grid(
             row=self._grid_row,
             column=0,
             columnspan=self._form_columns * 2,
@@ -800,11 +927,12 @@ class FieldMetadataDialog:
 
     def _on_submit(self) -> None:
         if not self._file_var.get():
-            messagebox.showwarning("Arquivo obrigatório", "Selecione um arquivo KMZ/KML.")
+            messagebox.showwarning("Arquivo obrigatorio", "Selecione um arquivo KMZ/KML.")
             return
-        nome = self._entries["nome"].get().strip() or FIELD_FORM_DEFAULTS["nome"]
-        cultivo = self._entries["cultivo"].get().strip() or FIELD_FORM_DEFAULTS["cultivo"]
+        nome = self._entries["nome"].get().strip() or self.defaults["nome"]
+        cultivo = self._entries["cultivo"].get().strip() or self.defaults["cultivo"]
         municipio = self._entries["municipio"].get().strip() or "Nao informado"
+        produtividade = self._entries["produtividade"].get().strip()
         attributes = {
             key: var.get().strip()
             for key, var in self._entries.items()
@@ -815,6 +943,8 @@ class FieldMetadataDialog:
             nome=nome,
             cultivo=cultivo,
             municipio=municipio,
+            produtividade=produtividade,
+            mode=self.mode,
             attributes=attributes,
         )
         self.window.destroy()
@@ -825,8 +955,8 @@ class FieldMetadataDialog:
         height = self.window.winfo_height()
         master_geo = self.master.winfo_toplevel().geometry()
         try:
-            _, rest = master_geo.split("+", 1)
-            mx, my = rest.split("+")
+            _, rest = master_geo.split('+', 1)
+            mx, my = rest.split('+')
             mx, my = int(mx), int(my)
         except ValueError:
             mx = self.master.winfo_rootx()
@@ -834,3 +964,29 @@ class FieldMetadataDialog:
         x = mx + (self.master.winfo_width() // 2) - width // 2
         y = my + (self.master.winfo_height() // 2) - height // 2
         self.window.geometry(f"{width}x{height}+{x}+{y}")
+
+
+class FieldMetadataDialog(BaseFormDialog):
+    def __init__(self, master) -> None:
+        super().__init__(
+            master,
+            title="Adicionar analise de solo completa",
+            defaults=FIELD_FORM_DEFAULTS,
+            sections=[("Analises de solo", SOIL_ANALYSIS_FIELDS)],
+            mode="soil",
+        )
+
+
+class FertilizationNeedDialog(BaseFormDialog):
+    def __init__(self, master) -> None:
+        sections = [
+            ("Parametros para calcario", NEED_LIME_FIELDS),
+            ("Necessidades de adubacao", NEED_NPK_FIELDS),
+        ]
+        super().__init__(
+            master,
+            title="Adicionar necessidade de adubacao",
+            defaults=NEED_FORM_DEFAULTS,
+            sections=sections,
+            mode="need",
+        )

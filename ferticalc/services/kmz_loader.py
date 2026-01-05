@@ -22,6 +22,7 @@ class FieldGeometry:
     area_ha: float = 0.0
     municipality: str | None = None
     cultivation: str | None = None
+    productivity: str | None = None
     metadata: Dict[str, str] = field(default_factory=dict)
 
 
