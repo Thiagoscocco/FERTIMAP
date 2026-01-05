@@ -55,10 +55,10 @@ class FieldFormResult:
 class AddFieldsPage(BasePage):
     """Load KMZ/KML files, list talhoes, and draw them on the canvas."""
 
-    title = "Adicionar talhoes"
+    title = "Adicionar Talhões"
     CANVAS_BG = "#fff4d6"
     FIELD_COLORS = ("#9ad19a", "#7ab5d3", "#f4b183", "#c9b8ff", "#f8d25c")
-    SIDEBAR_WIDTH = 440
+    SIDEBAR_WIDTH = 480
 
     def __init__(self, parent: ttk.Frame, app) -> None:
         super().__init__(parent, app)
@@ -67,22 +67,27 @@ class AddFieldsPage(BasePage):
         self.zoom_level: float = 1.0
         self.pan_x: float = 0.0
         self.pan_y: float = 0.0
-        self.status_var = tk.StringVar(value="Nenhum talhao carregado.")
-        self.total_area_var = tk.StringVar(value="Area total: 0.00 ha")
-        self.selected_area_var = tk.StringVar(value="Area selecionada: 0.00 ha")
-        self.municipality_var = tk.StringVar(value="Municipio: Nao informado")
+        self.status_var = tk.StringVar(value="Nenhum talhão carregado.")
+        self.total_area_var = tk.StringVar(value="Área total: 0.00 ha")
+        self.selected_area_var = tk.StringVar(value="Área selecionada: 0.00 ha")
+        self.municipality_var = tk.StringVar(value="Município: Não informado")
         self.sidebar_canvas: tk.Canvas | None = None
         self._drag_origin: tuple[float, float, float, float] | None = None
         self._dragging = False
 
     def build(self) -> None:
         self.style = ttk.Style()
-        self.style.configure("Card.TFrame", relief="ridge", borderwidth=1)
+        self.style.configure(
+            "Card.TFrame",
+            relief="ridge",
+            borderwidth=2,
+            padding=8,
+        )
         self.style.configure(
             "CardSelected.TFrame",
             relief="solid",
-            borderwidth=2,
-            background="#eaf4ff",
+            borderwidth=3,
+            background="#e8f2ff",
         )
 
         self.container = ttk.Frame(self.parent)
@@ -231,7 +236,7 @@ class AddFieldsPage(BasePage):
         for index, field in enumerate(self.fields):
             card = ttk.Frame(
                 self.field_cards_frame,
-                padding=8,
+                padding=12,
                 style="Card.TFrame",
             )
             card.pack(fill="x", pady=4)
@@ -392,7 +397,7 @@ class AddFieldsPage(BasePage):
                     idx = int(tag.split("-", 1)[1])
                 except ValueError:
                     continue
-                self._select_field(idx, sync_tree=True)
+                self._select_field(idx)
                 return
 
     # Data handling ------------------------------------------------------
@@ -478,6 +483,7 @@ class AddFieldsPage(BasePage):
     def _render_fields(self) -> None:
         self.canvas.delete("field")
         self.canvas.delete("label")
+        self.canvas.delete("placeholder")
         if not self.fields:
             self._draw_placeholder()
             return
@@ -575,6 +581,10 @@ class FieldMetadataDialog:
         self.result: FieldFormResult | None = None
         self._entries: dict[str, tk.StringVar] = {}
         self._file_var = tk.StringVar(value="")
+        self._form_columns = 3
+        self._grid_row = 0
+        self._grid_col = 0
+        self._form_frame: ttk.Frame | None = None
 
     def show(self) -> FieldFormResult | None:
         self.window = tk.Toplevel(self.master)
@@ -582,32 +592,48 @@ class FieldMetadataDialog:
         self.window.transient(self.master.winfo_toplevel())
         self.window.grab_set()
 
-        frame = ttk.Frame(self.window, padding=20)
-        frame.grid(row=0, column=0, sticky="nsew")
+        self.window.geometry("600x600")
+        self.window.minsize(520, 520)
+
+        container = ttk.Frame(self.window, padding=10)
+        container.grid(row=0, column=0, sticky="nsew")
         self.window.columnconfigure(0, weight=1)
         self.window.rowconfigure(0, weight=1)
 
-        row = 0
-        row = self._add_entry(frame, row, "nome", "Nome do talhao")
-        row = self._add_entry(frame, row, "municipio", "Municipio")
-
-        ttk.Label(frame, text="Cultivo").grid(row=row, column=0, sticky="w", pady=(8, 2))
-        cultivo_var = tk.StringVar(value=FIELD_FORM_DEFAULTS["cultivo"])
-        cultivo_cb = ttk.Combobox(
-            frame,
-            textvariable=cultivo_var,
-            values=CULTIVO_OPTIONS,
-            state="readonly",
+        canvas = tk.Canvas(container, highlightthickness=0)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(
+            container,
+            orient="vertical",
+            command=canvas.yview,
         )
-        cultivo_cb.grid(row=row, column=1, sticky="ew", pady=(8, 2))
-        self._entries["cultivo"] = cultivo_var
-        row += 1
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
 
-        ttk.Separator(frame).grid(row=row, column=0, columnspan=2, pady=12, sticky="ew")
-        row += 1
+        frame = ttk.Frame(canvas, padding=10)
+        frame_window = canvas.create_window((0, 0), window=frame, anchor="nw")
+        self._form_frame = frame
 
-        ttk.Label(frame, text="Analises de solo").grid(row=row, column=0, columnspan=2, sticky="w")
-        row += 1
+        def _update_scrollregion(_event=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        frame.bind("<Configure>", _update_scrollregion)
+        canvas.bind(
+            "<Configure>",
+            lambda event: canvas.itemconfigure(frame_window, width=event.width),
+        )
+
+        for column in range(self._form_columns * 2):
+            frame.columnconfigure(column, weight=1 if column % 2 else 0)
+
+        self._add_entry("nome", "Nome do talhao", full_width=True)
+        self._add_entry("municipio", "Municipio", full_width=True)
+        self._add_combobox("cultivo", "Cultivo", CULTIVO_OPTIONS, full_width=True)
+
+        self._add_separator(frame, "Analises de solo")
+
         analysis_fields = [
             ("argila", "Argila"),
             ("ph", "pH"),
@@ -633,36 +659,132 @@ class FieldMetadataDialog:
         ]
 
         for key, label in analysis_fields:
-            row = self._add_entry(frame, row, key, label)
+            self._add_entry(key, label)
 
-        ttk.Label(frame, text="Arquivo KMZ/KML").grid(row=row, column=0, sticky="w", pady=(12, 2))
+        ttk.Label(frame, text="Arquivo KMZ/KML").grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=self._form_columns * 2,
+            sticky="w",
+            pady=(12, 2),
+        )
+        self._grid_row += 1
         file_row = ttk.Frame(frame)
-        file_row.grid(row=row, column=1, sticky="ew", pady=(12, 2))
+        file_row.grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=self._form_columns * 2,
+            sticky="ew",
+            pady=(0, 2),
+        )
         file_row.columnconfigure(0, weight=1)
         ttk.Entry(file_row, textvariable=self._file_var, state="readonly").grid(
             row=0, column=0, sticky="ew"
         )
         ttk.Button(file_row, text="Escolher", command=self._choose_file).grid(row=0, column=1, padx=(6, 0))
-        row += 1
+        self._grid_row += 1
 
         button_row = ttk.Frame(frame)
-        button_row.grid(row=row, column=0, columnspan=2, pady=(16, 0), sticky="e")
+        button_row.grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=self._form_columns * 2,
+            pady=(16, 0),
+            sticky="e",
+        )
         ttk.Button(button_row, text="Cancelar", command=self._on_cancel).pack(side="right", padx=(6, 0))
         ttk.Button(button_row, text="Inserir talhao", command=self._on_submit, bootstyle="primary").pack(side="right")
 
-        frame.columnconfigure(1, weight=1)
         self.window.update_idletasks()
         self._center_window()
         self.master.wait_window(self.window)
         return self.result
 
-    def _add_entry(self, parent: ttk.Frame, row: int, key: str, label: str) -> int:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=(4, 2))
+    def _add_entry(self, key: str, label: str, full_width: bool = False) -> None:
+        def widget_factory():
+            return ttk.Entry(self._form_frame, textvariable=var)
+
         var = tk.StringVar(value=FIELD_FORM_DEFAULTS.get(key, ""))
-        entry = ttk.Entry(parent, textvariable=var)
-        entry.grid(row=row, column=1, sticky="ew", pady=(4, 2))
+        entry = self._place_field(label, widget_factory, full_width)
+        entry.configure(textvariable=var)
         self._entries[key] = var
-        return row + 1
+
+    def _add_combobox(self, key: str, label: str, values: tuple[str, ...], full_width: bool = False) -> None:
+        var = tk.StringVar(value=FIELD_FORM_DEFAULTS.get(key, values[0]))
+
+        def widget_factory():
+            return ttk.Combobox(
+                self._form_frame,
+                textvariable=var,
+                values=values,
+                state="readonly",
+            )
+
+        widget = self._place_field(label, widget_factory, full_width)
+        self._entries[key] = var
+
+    def _place_field(self, label: str, widget_factory, full_width: bool):
+        form = self._form_frame
+        columns = self._form_columns * 2
+        if form is None:
+            raise RuntimeError("Form frame not initialized")
+        if full_width:
+            ttk.Label(form, text=label).grid(
+                row=self._grid_row,
+                column=0,
+                columnspan=1,
+                sticky="w",
+                pady=(8, 2),
+            )
+            widget = widget_factory()
+            widget.grid(
+                row=self._grid_row,
+                column=1,
+                columnspan=columns - 1,
+                sticky="ew",
+                pady=(0, 2),
+            )
+            self._grid_row += 1
+            self._grid_col = 0
+        else:
+            col = self._grid_col * 2
+            ttk.Label(form, text=label).grid(
+                row=self._grid_row,
+                column=col,
+                sticky="w",
+                pady=(8, 2),
+            )
+            widget = widget_factory()
+            widget.grid(
+                row=self._grid_row,
+                column=col + 1,
+                sticky="ew",
+                pady=(0, 2),
+                padx=(0, 8),
+            )
+            self._grid_col += 1
+            if self._grid_col >= self._form_columns:
+                self._grid_col = 0
+                self._grid_row += 1
+        return widget
+
+    def _add_separator(self, parent: ttk.Frame, label: str) -> None:
+        ttk.Separator(parent).grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=self._form_columns * 2,
+            pady=(16, 6),
+            sticky="ew",
+        )
+        self._grid_row += 1
+        ttk.Label(parent, text=label).grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=self._form_columns * 2,
+            sticky="w",
+        )
+        self._grid_row += 1
+        self._grid_col = 0
 
     def _choose_file(self) -> None:
         file_path = filedialog.askopenfilename(

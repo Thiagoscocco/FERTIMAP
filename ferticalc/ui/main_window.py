@@ -19,6 +19,7 @@ class FerticalcApp(tb.Window):
         super().__init__(title="FertiCalc", themename="litera")
         self.geometry("1400x850")
         self.minsize(1024, 640)
+        self.after(200, self._maximize_window)
         self._pages: dict[str, BasePage] = {}
         self._build_layout()
 
@@ -55,3 +56,9 @@ class FerticalcApp(tb.Window):
     def run(self) -> None:
         """Start Tk mainloop."""
         self.mainloop()
+
+    def _maximize_window(self) -> None:
+        try:
+            self.state("zoomed")
+        except Exception:
+            pass
