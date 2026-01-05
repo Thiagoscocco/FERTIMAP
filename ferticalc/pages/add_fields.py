@@ -122,8 +122,8 @@ SHARED_FIELDS: list[FieldGeometry] = []
 class AddFieldsPage(BasePage):
     """Load KMZ/KML files, list talhoes, and draw them on the canvas."""
 
-    title = "Adicionar talhoes"
-    CANVAS_BG = "#fff4d6"
+    title = "Adicionar Talhões"
+    CANVAS_BG = "#d8d8d8"
     FIELD_COLORS = ("#9ad19a", "#7ab5d3", "#f4b183", "#c9b8ff", "#f8d25c")
     SIDEBAR_WIDTH = 480
 
@@ -168,19 +168,30 @@ class AddFieldsPage(BasePage):
         self.parent.after(100, self._draw_placeholder)
 
     def _build_canvas_area(self) -> None:
-        canvas_holder = ttk.Frame(self.container, padding=(20, 12, 12, 12))
+        canvas_wrapper = tk.Frame(self.container, background=self.CANVAS_BG, bd=0)
+        canvas_wrapper.grid(row=0, column=0, sticky="nsew", padx=(20, 12), pady=(12, 12))
+        canvas_wrapper.rowconfigure(0, weight=1)
+        canvas_wrapper.columnconfigure(0, weight=1)
+
+        canvas_holder = tk.Frame(
+            canvas_wrapper,
+            background=self.CANVAS_BG,
+            highlightthickness=0,
+            bd=0,
+        )
         canvas_holder.grid(row=0, column=0, sticky="nsew")
         canvas_holder.rowconfigure(1, weight=1)
         canvas_holder.columnconfigure(0, weight=1)
 
-        self.top_info = ttk.Frame(canvas_holder)
+        self.top_info = tk.Frame(canvas_holder, background=self.CANVAS_BG)
         self.top_info.grid(row=0, column=0, sticky="ew", pady=(8, 8))
         self.top_info.columnconfigure(0, weight=1)
-        ttk.Label(
+        tk.Label(
             self.top_info,
             textvariable=self.total_area_var,
             anchor="w",
             font=("Segoe UI", 10, "bold"),
+            background=self.CANVAS_BG,
         ).grid(row=0, column=0, sticky="w")
 
         self.canvas = tk.Canvas(
@@ -189,6 +200,7 @@ class AddFieldsPage(BasePage):
             highlightthickness=0,
             borderwidth=0,
         )
+        self.canvas.configure(bg=self.CANVAS_BG)
         self.canvas.grid(row=1, column=0, sticky="nsew")
         self.canvas.bind("<Configure>", lambda event: self._render_fields())
         self.canvas.bind("<MouseWheel>", self._on_canvas_scroll)
@@ -200,13 +212,14 @@ class AddFieldsPage(BasePage):
         self.canvas.tag_bind("field", "<ButtonRelease-1>", self._on_canvas_click)
         self.canvas.tag_bind("label", "<ButtonRelease-1>", self._on_canvas_click)
 
-        self.bottom_info = ttk.Frame(canvas_holder)
+        self.bottom_info = tk.Frame(canvas_holder, background=self.CANVAS_BG)
         self.bottom_info.grid(row=2, column=0, sticky="ew", pady=(8, 0))
-        ttk.Label(
+        tk.Label(
             self.bottom_info,
             textvariable=self.municipality_var,
             anchor="w",
             font=("Segoe UI", 10),
+            background=self.CANVAS_BG,
         ).grid(row=0, column=0, sticky="w")
 
     def _build_sidebar(self) -> None:
