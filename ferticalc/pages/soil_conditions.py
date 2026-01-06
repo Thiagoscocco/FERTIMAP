@@ -27,6 +27,7 @@ class SoilConditionsPage(AddFieldsPage):
         super().__init__(parent, app)
         self._text_fg = "#1f1f1f"
         self._manual_expanded: set[int] = set()
+        self._auto_expanded_index: int | None = None
 
     def _build_sidebar_content(self) -> None:
         ttk.Label(
@@ -49,6 +50,10 @@ class SoilConditionsPage(AddFieldsPage):
         self._manual_expanded = {
             idx for idx in self._manual_expanded if 0 <= idx < len(self.fields)
         }
+        if self._auto_expanded_index is not None and not (
+            0 <= self._auto_expanded_index < len(self.fields)
+        ):
+            self._auto_expanded_index = None
         for child in self.field_cards_frame.winfo_children():
             child.destroy()
         if not self.fields:
@@ -87,10 +92,10 @@ class SoilConditionsPage(AddFieldsPage):
             ).pack(side="left", anchor="w")
             toggle_label = tk.Label(
                 header,
-                text="^" if expanded else "v",
+                text="-" if expanded else "+",
                 bg=color,
                 fg=self._text_fg,
-                font=("Segoe UI", 11, "bold"),
+                font=("Segoe UI", 12, "bold"),
                 cursor="hand2",
                 padx=6,
             )
@@ -150,8 +155,13 @@ class SoilConditionsPage(AddFieldsPage):
     def _field_fill_color(self, base_color: str, _is_selected: bool) -> str:
         return base_color
 
+    def _select_field(self, index: int | None, _sync_tree: bool = False) -> None:
+        self._auto_expanded_index = index
+        super()._select_field(index, _sync_tree)
+        self._refresh_field_cards()
+
     def _is_card_expanded(self, index: int) -> bool:
-        return index in self._manual_expanded or self.selected_index == index
+        return index in self._manual_expanded or self._auto_expanded_index == index
 
     def _handle_toggle_click(self, index: int) -> str:
         expanded = self._is_card_expanded(index)
@@ -162,6 +172,8 @@ class SoilConditionsPage(AddFieldsPage):
         else:
             if pinned:
                 self._manual_expanded.remove(index)
+                if self._auto_expanded_index == index:
+                    self._auto_expanded_index = None
                 if self.selected_index == index:
                     self._select_field(None)
                 else:
