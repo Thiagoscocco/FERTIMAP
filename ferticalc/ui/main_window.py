@@ -11,6 +11,7 @@ import ttkbootstrap as tb
 from ..pages.add_fields import AddFieldsPage
 from ..pages.base_page import BasePage
 from ..pages.cultivos import CultivosPage
+from ..pages.soil_conditions import SoilConditionsPage
 
 
 class FerticalcApp(tb.Window):
@@ -32,7 +33,7 @@ class FerticalcApp(tb.Window):
         self.notebook.grid(row=0, column=0, sticky="nsew")
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_change)
 
-        for page_cls in (AddFieldsPage, CultivosPage):
+        for page_cls in (AddFieldsPage, CultivosPage, SoilConditionsPage):
             self._add_page(page_cls)
 
         # Ensure the first page receives a refresh call.

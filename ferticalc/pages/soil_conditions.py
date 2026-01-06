@@ -1,5 +1,5 @@
 """
-Second tab focusing on crop visualization and productivity info.
+Notebook tab focusing on soil condition classes derived from lab analyses.
 """
 
 from __future__ import annotations
@@ -9,16 +9,19 @@ from tkinter import ttk
 
 from ..services.field_colors import color_for_culture
 from ..services.kmz_loader import FieldGeometry
+from ..services.soil_conditions import SoilDataError, summarize_from_metadata
 from .add_fields import AddFieldsPage
 
 
-class CultivosPage(AddFieldsPage):
-    """Read-only overview of talhoes highlighting crop-specific colors."""
+class SoilConditionsPage(AddFieldsPage):
+    """Display soil availability classes per talhao."""
 
-    title = "Cultivos"
+    title = "Condicoes do solo"
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
     CARD_BODY_FONT = ("Bahnschrift", 10)
     CARD_EMPH_FONT = ("Bahnschrift", 9, "italic")
+    MACRO_CODES = ("P", "K", "Ca", "Mg", "S")
+    OTHER_CODES = ("Zn", "Cu", "B", "Mn")
 
     def __init__(self, parent: ttk.Frame, app) -> None:
         super().__init__(parent, app)
@@ -27,7 +30,7 @@ class CultivosPage(AddFieldsPage):
     def _build_sidebar_content(self) -> None:
         ttk.Label(
             self.sidebar_inner,
-            text="Acompanhe os talhoes carregados e a produtividade esperada de cada cultura.",
+            text="Confira as condicoes de disponibilidade dos nutrientes em cada talhao.",
             wraplength=self.SIDEBAR_WIDTH - 36,
         ).pack(fill="x", padx=(6, 2), pady=(0, 12))
 
@@ -82,23 +85,30 @@ class CultivosPage(AddFieldsPage):
                 font=self.CARD_BODY_FONT,
                 **text_kwargs,
             ).pack(anchor="w", pady=(4, 0))
-            tk.Label(
-                card,
-                text=f"Area: {field.area_ha:.2f} ha",
-                font=self.CARD_BODY_FONT,
-                **text_kwargs,
-            ).pack(anchor="w")
-            produtividade = (
-                field.productivity
-                or field.metadata.get("produtividade", "")
-                or "Nao informado"
-            )
-            tk.Label(
-                card,
-                text=f"Produtividade esperada: {produtividade}",
-                font=self.CARD_EMPH_FONT,
-                **text_kwargs,
-            ).pack(anchor="w", pady=(4, 0))
+
+            macro_lines, other_lines, warnings = self._build_condition_groups(field)
+
+            if macro_lines or other_lines:
+                columns = tk.Frame(card, bg=color)
+                columns.pack(fill="x", pady=(6, 0))
+                macro_frame = tk.Frame(columns, bg=color)
+                macro_frame.pack(side="left", expand=True, fill="both", padx=(0, 6))
+                other_frame = tk.Frame(columns, bg=color)
+                other_frame.pack(side="left", expand=True, fill="both")
+                self._render_condition_column(
+                    macro_frame, "Macronutrientes", macro_lines, text_kwargs
+                )
+                self._render_condition_column(
+                    other_frame, "Outros nutrientes", other_lines, text_kwargs
+                )
+
+            for message in warnings:
+                tk.Label(
+                    card,
+                    text=message,
+                    font=self.CARD_BODY_FONT,
+                    **text_kwargs,
+                ).pack(anchor="w", pady=(4, 0))
 
             self._bind_card_selection(card, index)
 
@@ -119,3 +129,54 @@ class CultivosPage(AddFieldsPage):
 
     def _field_fill_color(self, base_color: str, _is_selected: bool) -> str:
         return base_color
+
+    def _build_condition_groups(self, field: FieldGeometry) -> tuple[list[str], list[str], list[str]]:
+        metadata = field.metadata or {}
+        if metadata.get("modo") != "soil":
+            return [], [], ["Voce precisa inserir uma amostra de solo para gerar condicoes."]
+        try:
+            summary = summarize_from_metadata(metadata)
+        except SoilDataError as exc:
+            return [], [], [str(exc)]
+
+        macro_lines = [
+            f"{summary.elements[code].label}: {summary.elements[code].clazz}"
+            for code in self.MACRO_CODES
+            if code in summary.elements
+        ]
+        other_lines = [
+            f"{summary.elements[code].label}: {summary.elements[code].clazz}"
+            for code in self.OTHER_CODES
+            if code in summary.elements
+        ]
+        warnings = list(summary.warnings)
+        return macro_lines, other_lines, warnings
+
+    def _render_condition_column(
+        self,
+        container: tk.Frame,
+        title: str,
+        lines: list[str],
+        text_kwargs: dict,
+    ) -> None:
+        tk.Label(
+            container,
+            text=title,
+            font=self.CARD_EMPH_FONT,
+            **text_kwargs,
+        ).pack(anchor="w")
+        if not lines:
+            tk.Label(
+                container,
+                text="Sem dados",
+                font=self.CARD_BODY_FONT,
+                **text_kwargs,
+            ).pack(anchor="w", pady=(2, 0))
+            return
+        for line in lines:
+            tk.Label(
+                container,
+                text=line,
+                font=self.CARD_BODY_FONT,
+                **text_kwargs,
+            ).pack(anchor="w", pady=(2, 0))
