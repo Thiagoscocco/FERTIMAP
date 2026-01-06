@@ -26,6 +26,7 @@ class SoilConditionsPage(AddFieldsPage):
     def __init__(self, parent: ttk.Frame, app) -> None:
         super().__init__(parent, app)
         self._text_fg = "#1f1f1f"
+        self._manual_expanded: set[int] = set()
 
     def _build_sidebar_content(self) -> None:
         ttk.Label(
@@ -45,6 +46,9 @@ class SoilConditionsPage(AddFieldsPage):
         self._render_fields()
 
     def _refresh_field_cards(self) -> None:
+        self._manual_expanded = {
+            idx for idx in self._manual_expanded if 0 <= idx < len(self.fields)
+        }
         for child in self.field_cards_frame.winfo_children():
             child.destroy()
         if not self.fields:
@@ -58,6 +62,7 @@ class SoilConditionsPage(AddFieldsPage):
 
         for index, field in enumerate(self.fields):
             color = self._field_color(field, index)
+            expanded = self._is_card_expanded(index)
             card = tk.Frame(
                 self.field_cards_frame,
                 bg=color,
@@ -72,23 +77,38 @@ class SoilConditionsPage(AddFieldsPage):
             card.field_index = index  # type: ignore[attr-defined]
 
             text_kwargs = {"bg": color, "fg": self._text_fg, "anchor": "w", "justify": "left"}
+            header = tk.Frame(card, bg=color)
+            header.pack(fill="x")
             tk.Label(
-                card,
+                header,
                 text=field.name,
                 font=self.CARD_TITLE_FONT,
                 **text_kwargs,
-            ).pack(anchor="w")
+            ).pack(side="left", anchor="w")
+            toggle_label = tk.Label(
+                header,
+                text="^" if expanded else "v",
+                bg=color,
+                fg=self._text_fg,
+                font=("Segoe UI", 11, "bold"),
+                cursor="hand2",
+                padx=6,
+            )
+            toggle_label.pack(side="right")
+            toggle_label.bind(
+                "<Button-1>",
+                lambda event, idx=index: self._handle_toggle_click(idx),
+            )
             crop_name = field.cultivation or "Nao informado"
             tk.Label(
                 card,
                 text=f"Cultivo: {crop_name}",
                 font=self.CARD_BODY_FONT,
                 **text_kwargs,
-            ).pack(anchor="w", pady=(4, 0))
+            ).pack(anchor="w", pady=(2, 4))
 
-            macro_lines, other_lines, warnings = self._build_condition_groups(field)
-
-            if macro_lines or other_lines:
+            if expanded:
+                macro_lines, other_lines, warnings = self._build_condition_groups(field)
                 columns = tk.Frame(card, bg=color)
                 columns.pack(fill="x", pady=(6, 0))
                 macro_frame = tk.Frame(columns, bg=color)
@@ -102,13 +122,13 @@ class SoilConditionsPage(AddFieldsPage):
                     other_frame, "Outros nutrientes", other_lines, text_kwargs
                 )
 
-            for message in warnings:
-                tk.Label(
-                    card,
-                    text=message,
-                    font=self.CARD_BODY_FONT,
-                    **text_kwargs,
-                ).pack(anchor="w", pady=(4, 0))
+                for message in warnings:
+                    tk.Label(
+                        card,
+                        text=message,
+                        font=self.CARD_BODY_FONT,
+                        **text_kwargs,
+                    ).pack(anchor="w", pady=(4, 0))
 
             self._bind_card_selection(card, index)
 
@@ -129,6 +149,26 @@ class SoilConditionsPage(AddFieldsPage):
 
     def _field_fill_color(self, base_color: str, _is_selected: bool) -> str:
         return base_color
+
+    def _is_card_expanded(self, index: int) -> bool:
+        return index in self._manual_expanded or self.selected_index == index
+
+    def _handle_toggle_click(self, index: int) -> str:
+        expanded = self._is_card_expanded(index)
+        pinned = index in self._manual_expanded
+        if not expanded:
+            self._manual_expanded.add(index)
+            self._refresh_field_cards()
+        else:
+            if pinned:
+                self._manual_expanded.remove(index)
+                if self.selected_index == index:
+                    self._select_field(None)
+                else:
+                    self._refresh_field_cards()
+            else:
+                self._select_field(None)
+        return "break"
 
     def _build_condition_groups(self, field: FieldGeometry) -> tuple[list[str], list[str], list[str]]:
         metadata = field.metadata or {}
