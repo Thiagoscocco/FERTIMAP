@@ -20,8 +20,9 @@ class SoilConditionsPage(AddFieldsPage):
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
     CARD_BODY_FONT = ("Bahnschrift", 10)
     CARD_EMPH_FONT = ("Bahnschrift", 9, "italic")
+    SOIL_CHARACTERISTIC_CODES = ("ARGILA", "MO", "CTC")
     MACRO_CODES = ("P", "K", "Ca", "Mg", "S")
-    OTHER_CODES = ("Zn", "Cu", "B", "Mn")
+    MICRO_CODES = ("Zn", "Cu", "B", "Mn")
 
     def __init__(self, parent: ttk.Frame, app) -> None:
         super().__init__(parent, app)
@@ -113,7 +114,15 @@ class SoilConditionsPage(AddFieldsPage):
             ).pack(anchor="w", pady=(2, 4))
 
             if expanded:
-                macro_lines, other_lines, warnings = self._build_condition_groups(field)
+                characteristics, macro_lines, micro_lines, warnings = self._build_condition_groups(field)
+                features_frame = tk.Frame(card, bg=color)
+                features_frame.pack(fill="x")
+                self._render_condition_column(
+                    features_frame,
+                    "Caracteristicas do solo (argila, m.o e ctc)",
+                    characteristics,
+                    text_kwargs,
+                )
                 columns = tk.Frame(card, bg=color)
                 columns.pack(fill="x", pady=(6, 0))
                 macro_frame = tk.Frame(columns, bg=color)
@@ -124,7 +133,7 @@ class SoilConditionsPage(AddFieldsPage):
                     macro_frame, "Macronutrientes", macro_lines, text_kwargs
                 )
                 self._render_condition_column(
-                    other_frame, "Outros nutrientes", other_lines, text_kwargs
+                    other_frame, "Micronutrientes", micro_lines, text_kwargs
                 )
 
                 for message in warnings:
@@ -182,27 +191,27 @@ class SoilConditionsPage(AddFieldsPage):
                 self._select_field(None)
         return "break"
 
-    def _build_condition_groups(self, field: FieldGeometry) -> tuple[list[str], list[str], list[str]]:
+    def _build_condition_groups(self, field: FieldGeometry) -> tuple[list[str], list[str], list[str], list[str]]:
         metadata = field.metadata or {}
         if metadata.get("modo") != "soil":
-            return [], [], ["Voce precisa inserir uma amostra de solo para gerar condicoes."]
+            return [], [], [], ["Voce precisa inserir uma amostra de solo para gerar condicoes."]
         try:
             summary = summarize_from_metadata(metadata)
         except SoilDataError as exc:
-            return [], [], [str(exc)]
+            return [], [], [], [str(exc)]
 
-        macro_lines = [
-            f"{summary.elements[code].label}: {summary.elements[code].clazz}"
-            for code in self.MACRO_CODES
-            if code in summary.elements
-        ]
-        other_lines = [
-            f"{summary.elements[code].label}: {summary.elements[code].clazz}"
-            for code in self.OTHER_CODES
-            if code in summary.elements
-        ]
+        def _lines(codes: tuple[str, ...]) -> list[str]:
+            return [
+                f"{summary.elements[code].label}: {summary.elements[code].clazz}"
+                for code in codes
+                if code in summary.elements
+            ]
+
+        characteristic_lines = _lines(self.SOIL_CHARACTERISTIC_CODES)
+        macro_lines = _lines(self.MACRO_CODES)
+        micro_lines = _lines(self.MICRO_CODES)
         warnings = list(summary.warnings)
-        return macro_lines, other_lines, warnings
+        return characteristic_lines, macro_lines, micro_lines, warnings
 
     def _render_condition_column(
         self,

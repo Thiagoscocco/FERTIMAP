@@ -80,6 +80,34 @@ def ctc_range(ctc_cmolc_dm3: float) -> int:
     return 4
 
 
+def clay_class_label(argila_percent: float) -> str:
+    """Return clay classification label following Tabela 6.1."""
+
+    return f"Classe {clay_class(argila_percent)}"
+
+
+def classify_organic_matter(value_percent: float) -> ThreeLevelClass:
+    """Tabela 6.1: classify soil organic matter."""
+
+    if value_percent <= 2.5:
+        return ThreeLevelClass.BAIXO
+    if value_percent <= 5.0:
+        return ThreeLevelClass.MEDIO
+    return ThreeLevelClass.ALTO
+
+
+def classify_ctc_level(value_cmolc_dm3: float) -> str:
+    """Tabela 6.1: classify CTC availability."""
+
+    mapping = {
+        1: "Baixa",
+        2: "Media",
+        3: "Alta",
+        4: "Muito alta",
+    }
+    return mapping[ctc_range(value_cmolc_dm3)]
+
+
 def p_mehlich3_to_mehlich1(value: float, argila_percent: float) -> float:
     """Convert Mehlich-3 P to Mehlich-1 equivalent."""
 
@@ -317,11 +345,12 @@ def summarize_from_metadata(metadata: Mapping[str, object]) -> SoilConditionSumm
     """
     Build :class:`SoilConditionSummary` from a field metadata dictionary.
 
-    Expected keys: argila, ctc, p, k, ca, mg, s, zn, b, cu, mn.
+    Expected keys: argila, ctc, mo, p, k, ca, mg, s, zn, b, cu, mn.
     """
 
     argila = _require_float(metadata, "argila", "Argila")
     ctc = _require_float(metadata, "ctc", "CTC")
+    mo_percent = _require_float(metadata, "mo", "Materia organica")
     p_valor = _require_float(metadata, "p", "P")
     k_valor = _require_float(metadata, "k", "K")
     ca = _require_float(metadata, "ca", "Ca")
@@ -341,8 +370,14 @@ def summarize_from_metadata(metadata: Mapping[str, object]) -> SoilConditionSumm
     b_class = classify_b(b_valor)
     cu_class = classify_cu(cu_valor)
     mn_class = classify_mn(mn_valor)
+    argila_class_label = clay_class_label(argila)
+    mo_class = classify_organic_matter(mo_percent)
+    ctc_class_label = classify_ctc_level(ctc)
 
     elements: dict[str, SoilElementCondition] = {
+        "ARGILA": SoilElementCondition("ARGILA", "Argila", argila_class_label, argila, "%"),
+        "MO": SoilElementCondition("MO", "Materia organica", mo_class.value, mo_percent, "%"),
+        "CTC": SoilElementCondition("CTC", "CTC", ctc_class_label, ctc, "cmolc/dm3"),
         "P": SoilElementCondition("P", "Fosforo", p_class.value, p_equiv, "mg/dm3"),
         "K": SoilElementCondition("K", "Potassio", k_class.value, k_equiv, "mg/dm3"),
         "Ca": SoilElementCondition("Ca", "Calcio", ca_class.value, ca, "cmolc/dm3"),
