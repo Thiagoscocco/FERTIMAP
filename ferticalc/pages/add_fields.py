@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import random
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -83,6 +84,7 @@ SOIL_ANALYSIS_FIELDS = [
     ("b", "B"),
     ("mn", "Mn"),
 ]
+SOIL_ANALYSIS_KEYS = [key for key, _ in SOIL_ANALYSIS_FIELDS]
 
 NEED_LIME_FIELDS = [
     ("argila", "Argila"),
@@ -562,6 +564,7 @@ class AddFieldsPage(BasePage):
     def _render_fields(self) -> None:
         self.canvas.delete("field")
         self.canvas.delete("label")
+        self.canvas.delete("overlay")
         self.canvas.delete("placeholder")
         if not self.fields:
             self._draw_placeholder()
@@ -631,17 +634,29 @@ class AddFieldsPage(BasePage):
             self.canvas.create_text(
                 centroid_x,
                 centroid_y,
-                text=field.name,
+                text=self._field_label_text(field),
                 fill="#2f3640",
                 font=("Segoe UI", 10, "bold"),
                 tags=("label", f"field-{index}"),
             )
+
+        self._render_canvas_overlays(width, height)
 
     def _field_color(self, field: FieldGeometry, index: int) -> str:
         return self.FIELD_COLORS[index % len(self.FIELD_COLORS)]
 
     def _field_fill_color(self, base_color: str, is_selected: bool) -> str:
         return base_color if is_selected else self._lighten(base_color, 0.55)
+
+    def _field_label_text(self, field: FieldGeometry) -> str:
+        """Text displayed at the field centroid inside the canvas."""
+
+        return field.name
+
+    def _render_canvas_overlays(self, _width: int, _height: int) -> None:
+        """Optional hook for subclasses to draw extra information over the map."""
+
+        return
 
     @staticmethod
     def _lighten(color: str, factor: float) -> str:
@@ -827,15 +842,26 @@ class BaseFormDialog:
             column=0,
             columnspan=self._form_columns * 2,
             pady=(16, 0),
-            sticky="e",
+            sticky="ew",
         )
-        ttk.Button(button_row, text="Cancelar", command=self._on_cancel).pack(side="right", padx=(6, 0))
-        ttk.Button(button_row, text="Inserir talhao", command=self._on_submit, bootstyle="primary").pack(side="right")
+        button_row.columnconfigure(0, weight=1)
+        self._populate_button_row(button_row)
 
         self.window.update_idletasks()
         self._center_window()
         self.master.wait_window(self.window)
         return self.result
+
+    def _populate_button_row(self, button_row: ttk.Frame) -> None:
+        actions = ttk.Frame(button_row)
+        actions.pack(side="right")
+        ttk.Button(actions, text="Cancelar", command=self._on_cancel).pack(side="right", padx=(6, 0))
+        ttk.Button(
+            actions,
+            text="Inserir talhao",
+            command=self._on_submit,
+            bootstyle="primary",
+        ).pack(side="right")
 
     def _add_entry(self, key: str, label: str, full_width: bool = False) -> None:
         def widget_factory():
@@ -988,6 +1014,64 @@ class FieldMetadataDialog(BaseFormDialog):
             sections=[("Analises de solo", SOIL_ANALYSIS_FIELDS)],
             mode="soil",
         )
+
+    MICRO_FIELDS = {"s", "cu", "zn", "b", "mn"}
+    PERCENT_FIELDS = {"argila", "mo", "sat_bases", "sat_al"}
+    SPECIAL_RANGES = {
+        "ph": (4.0, 8.0),
+        "indice_smp": (5.0, 7.0),
+    }
+    FIELD_DECIMALS = {
+        "argila": 1,
+        "ph": 1,
+        "indice_smp": 1,
+        "k": 0,
+        "sat_bases": 1,
+        "sat_al": 1,
+        "ca_mg": 1,
+        "ca_k": 1,
+        "mg_k": 1,
+        "cu": 2,
+        "zn": 2,
+        "b": 2,
+    }
+
+    def show(self) -> FieldFormResult | None:
+        self._apply_random_defaults()
+        return super().show()
+
+    def _populate_button_row(self, button_row: ttk.Frame) -> None:
+        ttk.Button(
+            button_row,
+            text="Limpar espacos",
+            command=self._clear_analysis_fields,
+        ).pack(side="left")
+        super()._populate_button_row(button_row)
+
+    def _apply_random_defaults(self) -> None:
+        randomized = dict(FIELD_FORM_DEFAULTS)
+        for key in SOIL_ANALYSIS_KEYS:
+            randomized[key] = self._random_value_for_field(key)
+        self.defaults = randomized
+
+    def _random_value_for_field(self, key: str) -> str:
+        span = self.SPECIAL_RANGES.get(key)
+        if span is None:
+            span = (0.0, 7.0) if key in self.MICRO_FIELDS else (0.0, 70.0)
+        low, high = span
+        decimals = self.FIELD_DECIMALS.get(key, 1)
+        value = random.uniform(low, high)
+        text = f"{value:.{decimals}f}" if decimals > 0 else f"{int(round(value))}"
+        if decimals > 0 and "." in text:
+            text = text.rstrip("0").rstrip(".")
+        if key in self.PERCENT_FIELDS:
+            return f"{text}%"
+        return text
+
+    def _clear_analysis_fields(self) -> None:
+        for key in SOIL_ANALYSIS_KEYS:
+            if key in self._entries:
+                self._entries[key].set("")
 
 
 class FertilizationNeedDialog(BaseFormDialog):
