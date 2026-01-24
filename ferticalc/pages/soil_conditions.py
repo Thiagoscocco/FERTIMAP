@@ -24,6 +24,7 @@ class AttributeConfig:
     max_value: float
     include_blue: bool = True
     decimals: int = 1
+    unit: str | None = None
 
 
 class SoilConditionsPage(AddFieldsPage):
@@ -37,16 +38,16 @@ class SoilConditionsPage(AddFieldsPage):
     MACRO_CODES = ("P", "K", "Ca", "Mg", "S")
     MICRO_CODES = ("Zn", "Cu", "B", "Mn")
     ATTRIBUTE_CONFIGS: dict[str, AttributeConfig] = {
-        "argila": AttributeConfig("Argila", "argila", 10.0, 30.0, 40.0, decimals=0),
-        "mo": AttributeConfig("M.O", "mo", 0.3, 3.0, 60.0),
-        "ctc": AttributeConfig("CTC", "ctc", 0.8, 30.0, 40.0),
-        "p": AttributeConfig("Fosforo", "p", 0.0, 30.0, 70.0),
-        "k": AttributeConfig("Potassio", "k", 15.0, 100.0, 220.0, decimals=0),
-        "s": AttributeConfig("Enxofre", "s", 0.5, 6.0, 6.0, include_blue=False),
-        "cu": AttributeConfig("Cobre", "cu", 0.1, 0.8, 0.8, include_blue=False, decimals=2),
-        "zn": AttributeConfig("Zinco", "zn", 0.2, 0.8, 0.8, include_blue=False, decimals=2),
-        "b": AttributeConfig("Boro", "b", 0.0, 0.4, 0.4, include_blue=False, decimals=2),
-        "mn": AttributeConfig("Manganes", "mn", 1.0, 6.0, 6.0, include_blue=False),
+        "argila": AttributeConfig("Argila", "argila", 10.0, 30.0, 40.0, decimals=0, unit="%"),
+        "mo": AttributeConfig("M.O", "mo", 0.3, 3.0, 60.0, unit="%"),
+        "ctc": AttributeConfig("CTC", "ctc", 0.8, 30.0, 40.0, unit="cmol/dm³"),
+        "p": AttributeConfig("Fosforo", "p", 0.0, 30.0, 70.0, unit="mg/dm³"),
+        "k": AttributeConfig("Potassio", "k", 15.0, 100.0, 220.0, decimals=0, unit="mg/dm³"),
+        "s": AttributeConfig("Enxofre", "s", 0.5, 6.0, 6.0, include_blue=False, unit="mg/dm³"),
+        "cu": AttributeConfig("Cobre", "cu", 0.1, 0.8, 0.8, include_blue=False, decimals=2, unit="mg/dm³"),
+        "zn": AttributeConfig("Zinco", "zn", 0.2, 0.8, 0.8, include_blue=False, decimals=2, unit="mg/dm³"),
+        "b": AttributeConfig("Boro", "b", 0.0, 0.4, 0.4, include_blue=False, decimals=2, unit="mg/dm³"),
+        "mn": AttributeConfig("Manganes", "mn", 1.0, 6.0, 6.0, include_blue=False, unit="mg/dm³"),
         "ph": AttributeConfig("pH", "ph", 4.0, 5.6, 8.0),
     }
     ATTRIBUTE_ORDER = ("argila", "mo", "ctc", "p", "k", "s", "cu", "zn", "b", "mn", "ph")
@@ -159,7 +160,7 @@ class SoilConditionsPage(AddFieldsPage):
                 features_frame.pack(fill="x")
                 self._render_condition_column(
                     features_frame,
-                    "Caracteristicas do solo (argila, m.o e ctc)",
+                    "Caracteristicas do Solo",
                     characteristics,
                     text_kwargs,
                 )
@@ -296,7 +297,7 @@ class SoilConditionsPage(AddFieldsPage):
         if parsed is None:
             return self.COLOR_PINK, "Sem informacoes"
         color = self._attribute_color_for_value(parsed, config)
-        return color, self._format_attribute_value(parsed, config.decimals)
+        return color, self._format_attribute_value(parsed, config.decimals, config.unit)
 
     @staticmethod
     def _parse_attribute_value(raw_value: object) -> float | None:
@@ -317,13 +318,19 @@ class SoilConditionsPage(AddFieldsPage):
             return None
 
     @staticmethod
-    def _format_attribute_value(value: float, decimals: int) -> str:
+    def _format_attribute_value(
+        value: float, decimals: int, unit: str | None = None
+    ) -> str:
         decimals = max(0, min(decimals, 3))
         fmt = f"{{:.{decimals}f}}"
         text = fmt.format(value)
         if "." in text:
             text = text.rstrip("0").rstrip(".")
-        return text
+        if not unit:
+            return text
+        if unit == "%":
+            return f"{text}{unit}"
+        return f"{text} {unit}"
 
     def _attribute_color_for_value(self, value: float, config: AttributeConfig) -> str:
         min_v = config.min_value

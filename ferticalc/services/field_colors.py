@@ -9,6 +9,8 @@ CULTURE_COLORS = {
     "trigo": "#f79a3b",
     "azevem": "#e2b13c",
     "aveia": "#cfc6a0",
+    "gramineas de estacao fria": "#e2b13c",
+    "gramineas de estacao quente": "#d8884f",
 }
 
 DEFAULT_CULTURE_COLOR = "#d2d2d2"

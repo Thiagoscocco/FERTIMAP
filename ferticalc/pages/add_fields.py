@@ -5,6 +5,7 @@ First tab: UI to add and visualize talhoes as a navigable map.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import random
 import tkinter as tk
@@ -18,7 +19,10 @@ FIELD_FORM_DEFAULTS = {
     "nome": "TESTE 1",
     "municipio": "Nao informado",
     "cultivo": "Soja",
-    "produtividade": "60 sc/ha",
+    "cultivo_safra": "1",
+    "produtividade": "3",
+    "cultura_antecedente": "Indiferente",
+    "producao_cultura_antecedente": "",
     "argila": "13%",
     "ph": "4.7",
     "indice_smp": "6.7",
@@ -46,7 +50,10 @@ NEED_FORM_DEFAULTS = {
     "nome": "Necessidade teste",
     "municipio": "Nao informado",
     "cultivo": "Soja",
-    "produtividade": "60 sc/ha",
+    "cultivo_safra": "1",
+    "produtividade": "3",
+    "cultura_antecedente": "Indiferente",
+    "producao_cultura_antecedente": "",
     "argila": "13%",
     "ph": "4.7",
     "indice_smp": "6.7",
@@ -54,6 +61,8 @@ NEED_FORM_DEFAULTS = {
     "ca": "0.3",
     "mg": "0.2",
     "h_al": "2.0",
+    "ctc": "2.5",
+    "mo": "0.6",
     "sat_bases": "22",
     "sat_al": "51.7",
     "n": "100",
@@ -94,6 +103,8 @@ NEED_LIME_FIELDS = [
     ("ca", "Ca"),
     ("mg", "Mg"),
     ("h_al", "H + Al"),
+    ("ctc", "CTC"),
+    ("mo", "M.O"),
     ("sat_bases", "% Sat Bases"),
     ("sat_al", "% Sat Al"),
 ]
@@ -104,7 +115,16 @@ NEED_NPK_FIELDS = [
     ("k", "K"),
 ]
 
-CULTIVO_OPTIONS = ("Soja", "Milho", "Trigo", "Aveia", "Azevem")
+CULTIVO_OPTIONS = (
+    "Soja",
+    "Milho",
+    "Trigo",
+    "Aveia",
+    "Gramineas de estacao fria",
+    "Gramineas de estacao quente",
+)
+ANTECEDENTE_OPTIONS = ("Indiferente", "Graminea", "Leguminosa")
+SAFRA_OPTIONS = ("1", "2")
 
 
 @dataclass
@@ -142,6 +162,8 @@ class AddFieldsPage(BasePage):
         self.sidebar_canvas: tk.Canvas | None = None
         self._drag_origin: tuple[float, float, float, float] | None = None
         self._dragging = False
+        self._world_origin: tuple[float, float] | None = None
+        self._world_scale: float | None = None
 
     def build(self) -> None:
         self.style = ttk.Style()
@@ -371,7 +393,27 @@ class AddFieldsPage(BasePage):
         self._render_fields()
 
     def _bind_card_selection(self, widget, index: int) -> None:
-        widget.bind("<Button-1>", lambda _e, idx=index: self._select_field(idx, False))
+        interactive_types = (
+            ttk.Entry,
+            tk.Entry,
+            ttk.Combobox,
+            ttk.Spinbox,
+            tk.Text,
+            ttk.Button,
+            tk.Button,
+            ttk.Checkbutton,
+            ttk.Radiobutton,
+        )
+
+        def _handle_click(event, idx=index):
+            if isinstance(event.widget, interactive_types):
+                return None
+            # Defer selection so widget-specific bindings (e.g., expand/collapse)
+            # run before the sidebar is rebuilt.
+            self.parent.after_idle(lambda: self._select_field(idx, False))
+            return None
+
+        widget.bind("<Button-1>", _handle_click, add="+")
         for child in getattr(widget, "winfo_children", lambda: [])():
             self._bind_card_selection(child, index)
 
@@ -396,6 +438,31 @@ class AddFieldsPage(BasePage):
         self.pan_x = 0.0
         self.pan_y = 0.0
         self._render_fields()
+
+    def _reset_world_reference(self) -> None:
+        self._world_origin = None
+        self._world_scale = None
+
+    def _initialize_world_reference(
+        self,
+        world_points: list[tuple[float, float]],
+        draw_width: float,
+        draw_height: float,
+    ) -> None:
+        if self._world_origin is not None and self._world_scale is not None:
+            return
+        if not world_points:
+            return
+        min_x = min(x for x, _ in world_points)
+        max_x = max(x for x, _ in world_points)
+        min_y = min(y for _, y in world_points)
+        max_y = max(y for _, y in world_points)
+        world_width = max(max_x - min_x, 1.0)
+        world_height = max(max_y - min_y, 1.0)
+        scale_x = max(draw_width / world_width, 1e-6)
+        scale_y = max(draw_height / world_height, 1e-6)
+        self._world_scale = min(scale_x, scale_y)
+        self._world_origin = ((min_x + max_x) / 2, (min_y + max_y) / 2)
 
     # Canvas interaction -------------------------------------------------
     def _start_pan(self, event) -> None:
@@ -567,6 +634,7 @@ class AddFieldsPage(BasePage):
         self.canvas.delete("overlay")
         self.canvas.delete("placeholder")
         if not self.fields:
+            self._reset_world_reference()
             self._draw_placeholder()
             return
 
@@ -579,15 +647,28 @@ class AddFieldsPage(BasePage):
             point for field in self.fields for point in field.coordinates if point
         ]
         if not all_points:
+            self._reset_world_reference()
             self._draw_placeholder()
             return
 
-        latitudes = [lat for lat, _ in all_points]
-        longitudes = [lon for _, lon in all_points]
-        min_lat, max_lat = min(latitudes), max(latitudes)
-        min_lon, max_lon = min(longitudes), max(longitudes)
-        lat_range = max(max_lat - min_lat, 1e-6)
-        lon_range = max(max_lon - min_lon, 1e-6)
+        world_points_by_field: list[list[tuple[float, float]]] = []
+        world_points_flat: list[tuple[float, float]] = []
+        for field in self.fields:
+            if not field.coordinates:
+                world_points_by_field.append([])
+                continue
+            transformed: list[tuple[float, float]] = []
+            for point in field.coordinates:
+                if not point:
+                    continue
+                lat, lon = point
+                transformed.append(self._latlon_to_world(lat, lon))
+            world_points_by_field.append(transformed)
+            world_points_flat.extend(transformed)
+        if not world_points_flat:
+            self._reset_world_reference()
+            self._draw_placeholder()
+            return
 
         padding = 30
         draw_width = max(width - padding * 2, 10)
@@ -595,18 +676,23 @@ class AddFieldsPage(BasePage):
         center_x = padding + draw_width / 2
         center_y = padding + draw_height / 2
 
-        for index, field in enumerate(self.fields):
-            if not field.coordinates:
+        self._initialize_world_reference(world_points_flat, draw_width, draw_height)
+        if self._world_origin is None or self._world_scale is None:
+            return
+        origin_x, origin_y = self._world_origin
+        scale = self._world_scale
+
+        for index, (field, world_points) in enumerate(
+            zip(self.fields, world_points_by_field)
+        ):
+            if not field.coordinates or not world_points:
                 continue
             projected = [
                 (
-                    padding + (lon - min_lon) / lon_range * draw_width,
-                    height
-                    - (
-                        padding + (lat - min_lat) / lat_range * draw_height
-                    ),
+                    center_x + (x - origin_x) * scale,
+                    center_y - (y - origin_y) * scale,
                 )
-                for lat, lon in field.coordinates
+                for x, y in world_points
             ]
             adjusted = [
                 (
@@ -671,6 +757,15 @@ class AddFieldsPage(BasePage):
         g = int(g + (255 - g) * factor)
         b = int(b + (255 - b) * factor)
         return f"#{r:02x}{g:02x}{b:02x}"
+
+    @staticmethod
+    def _latlon_to_world(lat: float, lon: float) -> tuple[float, float]:
+        """Project latitude/longitude to a planar metric system (Web Mercator)."""
+        clamped_lat = max(min(lat, 89.9999), -89.9999)
+        radius = 6378137.0
+        x = radius * math.radians(lon)
+        y = radius * math.log(math.tan(math.pi / 4 + math.radians(clamped_lat) / 2))
+        return x, y
 
 class FieldModeDialog:
     """Prompt user to escolher o tipo de insercao."""
@@ -806,7 +901,19 @@ class BaseFormDialog:
         self._add_entry("nome", "Nome do talhao", full_width=True)
         self._add_entry("municipio", "Municipio", full_width=True)
         self._add_combobox("cultivo", "Cultivo", CULTIVO_OPTIONS, full_width=True)
-        self._add_entry("produtividade", "Produtividade esperada", full_width=True)
+        self._add_combobox("cultivo_safra", "Cultivo (1 ou 2)", SAFRA_OPTIONS, full_width=True)
+        self._add_entry("produtividade", "Produtividade esperada (t/ha)", full_width=True)
+        self._add_combobox(
+            "cultura_antecedente",
+            "Cultura antecedente",
+            ANTECEDENTE_OPTIONS,
+            full_width=True,
+        )
+        self._add_entry(
+            "producao_cultura_antecedente",
+            "Producao da cultura antecedente (t/ha)",
+            full_width=True,
+        )
 
         for title, fields in self.sections:
             self._add_separator(title)
@@ -977,6 +1084,9 @@ class BaseFormDialog:
             for key, var in self._entries.items()
             if key not in {"nome", "cultivo", "municipio"}
         }
+        cultura_antecedente = attributes.get("cultura_antecedente", "").strip().lower()
+        if cultura_antecedente == "indiferente":
+            attributes.pop("producao_cultura_antecedente", None)
         self.result = FieldFormResult(
             file_path=self._file_var.get(),
             nome=nome,
