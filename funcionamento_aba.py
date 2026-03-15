@@ -152,7 +152,7 @@ _NITROGENADOS_SEQ: Tuple[Fertilizante, ...] = (
 NITROGENADOS: Dict[str, Fertilizante] = {item.codigo: item for item in _NITROGENADOS_SEQ}
 _NITROGENADO_POR_NOME = {item.nome: item for item in _NITROGENADOS_SEQ}
 _NITROGENADO_POR_NORMALIZED = {_normalize_name(item.nome): item for item in _NITROGENADOS_SEQ}
-NITROGENADOS_CHOICES: Tuple[str, ...] = tuple(item.nome for item in _NITROGENADOS_SEQ)
+NITROGENADOS_CHOICES: Tuple [str, ...] = tuple (item.nome for item in _NITROGENADOS_SEQ)
 
 GESSO_PADRAO = Fertilizante("GESSO", "Gesso agricola", s=0.17)
 MOLIBDATO_PADRAO = Fertilizante("MOLIBDATO", "Molibdato de sodio (Mo)", mo=0.39)
@@ -190,11 +190,6 @@ def obter_nitrogenado_por_nome(nome: str | None) -> Fertilizante | None:
         return None
     chave = _normalize_name(nome)
     return _NITROGENADO_POR_NOME.get(nome) or _NITROGENADO_POR_NORMALIZED.get(chave)
-
-
-# ---------------------------------------------------------------------------
-# Utilitarios de calculo
-# ---------------------------------------------------------------------------
 
 
 def _adicionar_produto(destino: List[Tuple[str, float]], nome: str, quantidade: float, minimo: float = 1e-6) -> None:

@@ -95,6 +95,103 @@ SOIL_ANALYSIS_FIELDS = [
 ]
 SOIL_ANALYSIS_KEYS = [key for key, _ in SOIL_ANALYSIS_FIELDS]
 
+# Validation helper: prefilled soil samples for testing (easy to remove).
+SOIL_SAMPLE_OPTIONS = ("Analise 1", "Analise 2", "Analise 3", "Analise 4")
+SOIL_SAMPLE_VALUES = {
+    "Analise 1": {
+        "argila": "13%",
+        "ph": "5.5",
+        "indice_smp": "6.8",
+        "k": "44",
+        "p": "7.3",
+        "mo": "1.4",
+        "al": "0",
+        "ca": "1,1",
+        "mg": "0.5",
+        "h_al": "1.7",
+        "ctc": "3.42",
+        "sat_bases": "50",
+        "sat_al": "0",
+        "ca_mg": "2.2",
+        "ca_k": "10",
+        "mg_k": "4.4",
+        "s": "5.2",
+        "zn": "1.2",
+        "cu": "0.2",
+        "b": "0.2",
+        "mn": "5",
+    },
+    "Analise 2": {
+        "argila": "17%",
+        "ph": "5.2",
+        "indice_smp": "6.5",
+        "p": "12",
+        "k": "29",
+        "mo": "1.5",
+        "al": "0.2",
+        "ca": "0.7",
+        "mg": "0.3",
+        "h_al": "2.5",
+        "ctc": "3.59",
+        "sat_bases": "30",
+        "sat_al": "15.4",
+        "ca_mg": "2.3",
+        "ca_k": "9",
+        "mg_k": "3.5",
+        "s": "6.7",
+        "zn": "1.3",
+        "cu": "0.2",
+        "b": "0.2",
+        "mn": "14",
+    },
+    "Analise 3": {
+        "argila": "15%",
+        "ph": "5.3",
+        "indice_smp": "6.6",
+        "p": "5.7",
+        "k": "78",
+        "mo": "2.2",
+        "al": "0.1",
+        "ca": "1.2",
+        "mg": "0.7",
+        "h_al": "2.2",
+        "ctc": "4.31",
+        "sat_bases": "49",
+        "sat_al": "4.5",
+        "ca_mg": "1.7",
+        "ca_k": "6",
+        "mg_k": "3.5",
+        "s": "5.5",
+        "zn": "1.8",
+        "cu": "0,1",
+        "b": "0.4",
+        "mn": "11",
+    },
+    "Analise 4": {
+        "argila": "18%",
+        "ph": "5.2",
+        "indice_smp": "6.6",
+        "p": "4.6",
+        "k": "46",
+        "mo": "1.4",
+        "al": "0.1",
+        "ca": "1.6",
+        "mg": "0.6",
+        "h_al": "2.2",
+        "ctc": "4.53",
+        "sat_bases": "51",
+        "sat_al": "4.1",
+        "ca_mg": "2.7",
+        "ca_k": "14",
+        "mg_k": "5",
+        "s": "5.7",
+        "zn": "2.2",
+        "cu": "0.4",
+        "b": "0.3",
+        "mn": "10",
+    },
+}
+
 NEED_LIME_FIELDS = [
     ("argila", "Argila"),
     ("ph", "pH"),
@@ -1124,6 +1221,7 @@ class FieldMetadataDialog(BaseFormDialog):
             sections=[("Analises de solo", SOIL_ANALYSIS_FIELDS)],
             mode="soil",
         )
+        self._sample_var = tk.StringVar(value="")
 
     MICRO_FIELDS = {"s", "cu", "zn", "b", "mn"}
     PERCENT_FIELDS = {"argila", "mo", "sat_bases", "sat_al"}
@@ -1151,11 +1249,23 @@ class FieldMetadataDialog(BaseFormDialog):
         return super().show()
 
     def _populate_button_row(self, button_row: ttk.Frame) -> None:
+        left = ttk.Frame(button_row)
+        left.pack(side="left")
+        ttk.Label(left, text="Amostra de validacao").pack(anchor="w")
+        sample_combo = ttk.Combobox(
+            left,
+            state="readonly",
+            values=SOIL_SAMPLE_OPTIONS,
+            textvariable=self._sample_var,
+            width=16,
+        )
+        sample_combo.pack(anchor="w", pady=(2, 0))
+        sample_combo.bind("<<ComboboxSelected>>", self._apply_sample_values)
         ttk.Button(
-            button_row,
+            left,
             text="Limpar espacos",
             command=self._clear_analysis_fields,
-        ).pack(side="left")
+        ).pack(anchor="w", pady=(6, 0))
         super()._populate_button_row(button_row)
 
     def _apply_random_defaults(self) -> None:
@@ -1181,6 +1291,19 @@ class FieldMetadataDialog(BaseFormDialog):
     def _clear_analysis_fields(self) -> None:
         for key in SOIL_ANALYSIS_KEYS:
             if key in self._entries:
+                self._entries[key].set("")
+
+    def _apply_sample_values(self, _event=None) -> None:
+        sample_name = self._sample_var.get()
+        if not sample_name or sample_name not in SOIL_SAMPLE_VALUES:
+            return
+        sample = SOIL_SAMPLE_VALUES[sample_name]
+        for key in SOIL_ANALYSIS_KEYS:
+            if key not in self._entries:
+                continue
+            if key in sample:
+                self._entries[key].set(sample[key])
+            else:
                 self._entries[key].set("")
 
 
