@@ -39,8 +39,8 @@ class SoilConditionsPage(AddFieldsPage):
     MICRO_CODES = ("Zn", "Cu", "B", "Mn")
     ATTRIBUTE_CONFIGS: dict[str, AttributeConfig] = {
         "argila": AttributeConfig("Argila", "argila", 10.0, 30.0, 40.0, decimals=0, unit="%"),
-        "mo": AttributeConfig("M.O", "mo", 0.3, 3.0, 60.0, unit="%"),
-        "ctc": AttributeConfig("CTC", "ctc", 0.8, 30.0, 40.0, unit="cmol/dm³"),
+        "mo": AttributeConfig("M.o", "mo", 0.3, 3.0, 60.0, unit="%"),
+        "ctc": AttributeConfig("Ctc", "ctc", 0.8, 30.0, 40.0, unit="cmol/dm³"),
         "p": AttributeConfig("Fosforo", "p", 0.0, 30.0, 70.0, unit="mg/dm³"),
         "k": AttributeConfig("Potassio", "k", 15.0, 100.0, 220.0, decimals=0, unit="mg/dm³"),
         "s": AttributeConfig("Enxofre", "s", 0.5, 6.0, 6.0, include_blue=False, unit="mg/dm³"),
@@ -48,7 +48,7 @@ class SoilConditionsPage(AddFieldsPage):
         "zn": AttributeConfig("Zinco", "zn", 0.2, 0.8, 0.8, include_blue=False, decimals=2, unit="mg/dm³"),
         "b": AttributeConfig("Boro", "b", 0.0, 0.4, 0.4, include_blue=False, decimals=2, unit="mg/dm³"),
         "mn": AttributeConfig("Manganes", "mn", 1.0, 6.0, 6.0, include_blue=False, unit="mg/dm³"),
-        "ph": AttributeConfig("pH", "ph", 4.0, 5.6, 8.0),
+        "ph": AttributeConfig("Ph", "ph", 4.0, 5.6, 8.0),
     }
     ATTRIBUTE_ORDER = ("argila", "mo", "ctc", "p", "k", "s", "cu", "zn", "b", "mn", "ph")
     COLOR_RED = (187, 45, 33)
@@ -395,7 +395,7 @@ class SoilConditionsPage(AddFieldsPage):
         self.canvas.create_text(
             x0 + 12,
             y0 + 16,
-            text=f"Escala {config.label}",
+            text=f"Escala {config.label.upper()}",
             anchor="w",
             font=("Segoe UI", 9, "bold"),
             fill="#2c3e50",

@@ -33,9 +33,9 @@ class CalagemPage(AddFieldsPage):
         ("Pastagem natural", ManagementScenario.CAMPO_NATURAL),
     ]
     METRIC_OPTIONS = (
-        ("Toneladas/ha", "dose_ha"),
-        ("Toneladas totais", "dose_total"),
-        ("Metodo de aplicacao", "application"),
+        ("Dose", "dose_ha"),
+        ("Total no talhao", "dose_total"),
+        ("Aplicacao", "application"),
     )
     UNIT_OPTIONS = (
         ("Toneladas (t)", "t"),
@@ -185,7 +185,7 @@ class CalagemPage(AddFieldsPage):
             ).pack(anchor="w", pady=(2, 4))
             tk.Label(
                 card,
-                text=f"{self._metric_var.get()}: {self._metric_display(field)}",
+                text=self._card_metric_display(field),
                 font=self.CARD_EMPH_FONT,
                 **text_kwargs,
             ).pack(anchor="w", pady=(0, 4))
@@ -241,7 +241,6 @@ class CalagemPage(AddFieldsPage):
     def _on_metric_change(self, *_args) -> None:
         if not hasattr(self, "field_cards_frame"):
             return
-        self._refresh_field_cards()
         self._render_fields()
 
     def _on_unit_change(self, *_args) -> None:
@@ -649,7 +648,11 @@ class CalagemPage(AddFieldsPage):
                     self.canvas.itemconfigure(item, text=label)
 
     def _canvas_label(self, field: FieldGeometry) -> str:
-        return self._metric_display(field)
+        label = self._metric_var.get().upper()
+        return f"{field.name}\n{label}: {self._metric_display(field)}"
+
+    def _field_label_text(self, field: FieldGeometry) -> str:
+        return self._canvas_label(field)
 
     def _enable_edit_mode(self, index: int) -> None:
         if index < 0 or index >= len(self.fields):
@@ -713,6 +716,12 @@ class CalagemPage(AddFieldsPage):
             return result.get("application", "Sem dado")
         value = result.get(metric_key)
         return str(value) if value is not None else "Sem dado"
+
+    def _card_metric_display(self, field: FieldGeometry) -> str:
+        result = field.metadata.get("_calagem_result") if field.metadata else None
+        if not result:
+            return "Dose: Aguardando calculo"
+        return f"Dose: {self._format_per_ha_value(result.get('dose_ha'))}"
 
     def _current_unit_key(self) -> str:
         label = self._unit_var.get()

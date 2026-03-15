@@ -54,7 +54,8 @@ class AdubacaoPage(AddFieldsPage):
     ANTECEDENTE_OPTIONS = ("Indiferente", "Graminea", "Leguminosa")
     USO_FORRAGEIRA_OPTIONS = ("Pastejo", "Corte")
     CULTIVO_OPTIONS = ("1", "2")
-    METRIC_BASE_LABELS = ("Nitrogenio", "Fosforo", "Potassio", "Outros")
+    NEED_METRIC_LABELS = ("Nitrogenio", "Fosforo", "Potassio", "Enxofre", "Molibdenio")
+    EMPTY_OPTION = "Vazio"
     UNIT_OPTIONS = (
         ("Quilos (kg)", "kg"),
         ("Toneladas (t)", "t"),
@@ -79,14 +80,32 @@ class AdubacaoPage(AddFieldsPage):
         self._text_fg = "#1f1f1f"
         self._manual_expanded: set[int] = set()
         self._auto_expanded_index: int | None = None
-        self._metric_var = tk.StringVar(value=self.METRIC_BASE_LABELS[0])
-        self._metric_var.trace_add("write", self._on_metric_change)
+        self._need_metric_var = tk.StringVar(value=self.NEED_METRIC_LABELS[0])
+        self._need_metric_var.trace_add("write", self._on_metric_change)
+        self._fert_metric_var = tk.StringVar(value=self.EMPTY_OPTION)
+        self._fert_metric_var.trace_add("write", self._on_metric_change)
         self._unit_var = tk.StringVar(value=self.UNIT_OPTIONS[0][0])
         self._unit_var.trace_add("write", self._on_unit_change)
-        self._metric_options: list[str] = list(self.METRIC_BASE_LABELS)
-        self._metric_map: dict[str, tuple[str, str | None]] = {}
+        self._need_metric_options: list[str] = [self.EMPTY_OPTION, *self.NEED_METRIC_LABELS]
+        self._fert_metric_options: list[str] = [self.EMPTY_OPTION]
+        self._fert_metric_map: dict[str, str] = {}
         self._metric_range: tuple[float, float] | None = None
         self._total_metric: float = 0.0
+
+    @staticmethod
+    def _combo_label(text: str) -> str:
+        value = text.strip()
+        if not value:
+            return value
+        lowered = value.lower()
+        return lowered[0].upper() + lowered[1:]
+
+    @staticmethod
+    def _uppercase_label_line(line: str) -> str:
+        if ":" not in line:
+            return line
+        label, rest = line.split(":", 1)
+        return f"{label.upper()}:{rest}"
 
     def build(self) -> None:
         super().build()
@@ -114,22 +133,41 @@ class AdubacaoPage(AddFieldsPage):
     def _build_attribute_viewer(self) -> None:
         container = ttk.LabelFrame(
             self.sidebar_inner,
-            text="Visualizacao dos atributos",
+            text="Visualizacao da necessidade",
             padding=(12, 8),
         )
         container.pack(fill="x", padx=(6, 2), pady=(0, 12))
         ttk.Label(
             container,
-            text="Escolha a informacao que deseja visualizar nos talhoes.",
+            text="Escolha a necessidade de adubacao que deseja visualizar nos talhoes.",
             wraplength=self.SIDEBAR_WIDTH - 60,
         ).pack(anchor="w")
-        self._metric_combo = ttk.Combobox(
+        self._need_metric_combo = ttk.Combobox(
             container,
             state="readonly",
-            values=self._metric_options,
-            textvariable=self._metric_var,
+            values=self._need_metric_options,
+            textvariable=self._need_metric_var,
         )
-        self._metric_combo.pack(fill="x", pady=(10, 0))
+        self._need_metric_combo.pack(fill="x", pady=(10, 0))
+
+        fert_container = ttk.LabelFrame(
+            self.sidebar_inner,
+            text="Visualizacao dos fertilizantes",
+            padding=(12, 8),
+        )
+        fert_container.pack(fill="x", padx=(6, 2), pady=(0, 12))
+        ttk.Label(
+            fert_container,
+            text="Escolha o fertilizante que deseja visualizar nos talhoes.",
+            wraplength=self.SIDEBAR_WIDTH - 60,
+        ).pack(anchor="w")
+        self._fert_metric_combo = ttk.Combobox(
+            fert_container,
+            state="readonly",
+            values=self._fert_metric_options,
+            textvariable=self._fert_metric_var,
+        )
+        self._fert_metric_combo.pack(fill="x", pady=(10, 0))
 
     def _on_metric_change(self, *_args) -> None:
         if not hasattr(self, "field_cards_frame"):
@@ -242,12 +280,22 @@ class AdubacaoPage(AddFieldsPage):
                 font=self.CARD_BODY_FONT,
                 **text_kwargs,
             ).pack(anchor="w", pady=(2, 4))
-            tk.Label(
-                card,
-                text=f"{self._metric_var.get()}: {self._metric_display(field)}",
-                font=self.CARD_EMPH_FONT,
-                **text_kwargs,
-            ).pack(anchor="w", pady=(0, 4))
+            need_line = self._need_metric_line(field)
+            if need_line:
+                tk.Label(
+                    card,
+                    text=need_line,
+                    font=self.CARD_EMPH_FONT,
+                    **text_kwargs,
+                ).pack(anchor="w", pady=(0, 2))
+            fert_line = self._fert_metric_line(field)
+            if fert_line:
+                tk.Label(
+                    card,
+                    text=fert_line,
+                    font=self.CARD_EMPH_FONT,
+                    **text_kwargs,
+                ).pack(anchor="w", pady=(0, 4))
 
             if expanded:
                 self._render_form_section(card, field, index, text_kwargs)
@@ -556,10 +604,17 @@ class AdubacaoPage(AddFieldsPage):
             font=self.CARD_BODY_FONT,
             **text_kwargs,
         ).pack(anchor="w")
-        if req.get("S", 0) or req.get("Mo", 0):
+        if req.get("S", 0):
             tk.Label(
                 output_frame,
-                text=f"Outros: {self._format_per_ha_value(req.get('S', 0) + req.get('Mo', 0))}",
+                text=f"S: {self._format_per_ha_value(req.get('S'))}",
+                font=self.CARD_BODY_FONT,
+                **text_kwargs,
+            ).pack(anchor="w")
+        if req.get("Mo", 0):
+            tk.Label(
+                output_frame,
+                text=f"Mo: {self._format_per_ha_value(req.get('Mo'))}",
                 font=self.CARD_BODY_FONT,
                 **text_kwargs,
             ).pack(anchor="w")
@@ -814,7 +869,14 @@ class AdubacaoPage(AddFieldsPage):
                     self.canvas.itemconfigure(item, text=label)
 
     def _canvas_label(self, field: FieldGeometry) -> str:
-        return f"{field.name}\n{self._metric_var.get()}: {self._metric_display(field)}"
+        lines = [field.name]
+        need_line = self._need_metric_line(field)
+        if need_line:
+            lines.append(self._uppercase_label_line(need_line))
+        fert_line = self._fert_metric_line(field)
+        if fert_line:
+            lines.append(self._uppercase_label_line(fert_line))
+        return "\n".join(lines)
 
     def _enable_edit_mode(self, index: int) -> None:
         if index < 0 or index >= len(self.fields):
@@ -865,56 +927,92 @@ class AdubacaoPage(AddFieldsPage):
             result = meta.get("_adubacao_result") or {}
             for nome, _ in result.get("produtos", []):
                 products.add(nome)
-        options = list(self.METRIC_BASE_LABELS) + sorted(products)
-        self._metric_options = options
-        self._metric_map = {
-            "Nitrogenio": ("nutrient", "N"),
-            "Fosforo": ("nutrient", "P2O5"),
-            "Potassio": ("nutrient", "K2O"),
-            "Outros": ("other", None),
-        }
-        for nome in products:
-            self._metric_map[nome] = ("product", nome)
 
-        if self._metric_var.get() not in options:
-            self._metric_var.set(self.METRIC_BASE_LABELS[0])
-        if getattr(self, "_metric_combo", None):
-            self._metric_combo.configure(values=options)
+        self._need_metric_options = [self.EMPTY_OPTION, *self.NEED_METRIC_LABELS]
+        if self._need_metric_var.get() not in self._need_metric_options:
+            self._need_metric_var.set(self.NEED_METRIC_LABELS[0])
+        if getattr(self, "_need_metric_combo", None):
+            self._need_metric_combo.configure(values=self._need_metric_options)
 
-    def _current_metric_key(self) -> tuple[str, str | None]:
-        return self._metric_map.get(
-            self._metric_var.get(), ("nutrient", "N")
-        )
+        display_products: list[str] = []
+        display_map: dict[str, str] = {}
+        for nome in sorted(products):
+            display = self._combo_label(nome)
+            if display in display_map:
+                display = nome
+            display_products.append(display)
+            display_map[display] = nome
+        self._fert_metric_options = [self.EMPTY_OPTION, *display_products]
+        self._fert_metric_map = display_map
+        if self._fert_metric_var.get() not in self._fert_metric_options:
+            self._fert_metric_var.set(self.EMPTY_OPTION)
+        if getattr(self, "_fert_metric_combo", None):
+            self._fert_metric_combo.configure(values=self._fert_metric_options)
 
-    def _metric_display(self, field: FieldGeometry) -> str:
-        value = self._metric_value(field)
-        if value is None:
-            return "Aguardando calculo"
-        return self._format_per_ha_value(value)
+    def _current_need_metric_key(self) -> str | None:
+        label = self._need_metric_var.get()
+        if label.strip().lower() == self.EMPTY_OPTION.lower():
+            return None
+        return {
+            "Nitrogenio": "N",
+            "Fosforo": "P2O5",
+            "Potassio": "K2O",
+            "Enxofre": "S",
+            "Molibdenio": "Mo",
+        }.get(label)
 
-    def _metric_value(self, field: FieldGeometry) -> float | None:
+    def _current_fert_metric_key(self) -> str | None:
+        label = self._fert_metric_var.get()
+        if label.strip().lower() == self.EMPTY_OPTION.lower():
+            return None
+        return self._fert_metric_map.get(label, label)
+
+    def _need_metric_value(self, field: FieldGeometry) -> float | None:
         meta = field.metadata or {}
         result = meta.get("_adubacao_result")
         if not result:
             return None
-        key_type, key = self._current_metric_key()
-        if key_type == "nutrient" and key:
-            return float(result.get("requirement", {}).get(key, 0.0))
-        if key_type == "other":
-            req = result.get("requirement", {})
-            return float(req.get("S", 0.0)) + float(req.get("Mo", 0.0))
-        if key_type == "product" and key:
-            for nome, quantidade in result.get("produtos", []):
-                if nome == key:
-                    return float(quantidade)
-            return 0.0
+        key = self._current_need_metric_key()
+        if not key:
+            return None
+        return float(result.get("requirement", {}).get(key, 0.0))
+
+    def _fert_metric_value(self, field: FieldGeometry) -> float | None:
+        meta = field.metadata or {}
+        result = meta.get("_adubacao_result")
+        if not result:
+            return None
+        key = self._current_fert_metric_key()
+        if not key:
+            return None
+        for nome, quantidade in result.get("produtos", []):
+            if nome == key:
+                return float(quantidade)
         return 0.0
+
+    def _need_metric_line(self, field: FieldGeometry) -> str | None:
+        label = self._need_metric_var.get()
+        if label.strip().lower() == self.EMPTY_OPTION.lower():
+            return None
+        value = self._need_metric_value(field)
+        if value is None:
+            return f"{label}: Aguardando calculo"
+        return f"{label}: {self._format_per_ha_value(value)}"
+
+    def _fert_metric_line(self, field: FieldGeometry) -> str | None:
+        label = self._fert_metric_var.get()
+        if label.strip().lower() == self.EMPTY_OPTION.lower():
+            return None
+        value = self._fert_metric_value(field)
+        if value is None:
+            return f"{label}: Aguardando calculo"
+        return f"{label}: {self._format_per_ha_value(value)}"
 
     def _update_metric_stats(self) -> None:
         values: list[float] = []
         total = 0.0
         for field in self.fields:
-            value = self._metric_value(field)
+            value = self._need_metric_value(field)
             if value is None:
                 continue
             values.append(value)
@@ -925,6 +1023,8 @@ class AdubacaoPage(AddFieldsPage):
     def _render_canvas_overlays(self, width: int, height: int) -> None:
         super()._render_canvas_overlays(width, height)
         if not getattr(self, "canvas", None):
+            return
+        if self._current_need_metric_key() is None:
             return
         scale_bbox = None
         if self._metric_range:
@@ -1069,7 +1169,7 @@ class AdubacaoPage(AddFieldsPage):
         )
 
     def _metric_color(self, field: FieldGeometry) -> str:
-        value = self._metric_value(field)
+        value = self._need_metric_value(field)
         if value is None:
             return self.COLOR_NO_DATA
         try:
