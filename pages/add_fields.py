@@ -1,7 +1,3 @@
-"""
-First tab: UI to add and visualize talhoes as a navigable map.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
