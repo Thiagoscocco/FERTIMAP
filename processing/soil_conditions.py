@@ -7,7 +7,6 @@ from typing import Mapping, Optional, Tuple
 
 
 class AvailabilityClass(str, Enum):
-    """Five-level availability scale used for P and K."""
 
     MUITO_BAIXO = "Muito baixo"
     BAIXO = "Baixo"
@@ -17,7 +16,6 @@ class AvailabilityClass(str, Enum):
 
 
 class ThreeLevelClass(str, Enum):
-    """Three-level scale used for Ca, Mg, S and micronutrients."""
 
     BAIXO = "Baixo"
     MEDIO = "Medio"
@@ -25,7 +23,6 @@ class ThreeLevelClass(str, Enum):
 
 
 def _sanitize_float(value: object) -> Optional[float]:
-    """Return ``value`` as float, ignoring percent signs and commas."""
 
     if value is None:
         return None
@@ -45,7 +42,6 @@ def _sanitize_float(value: object) -> Optional[float]:
 
 
 def clay_class(argila_percent: float) -> int:
-    """Tabela 6.1: return class 1..4 for P interpretation."""
 
     if argila_percent > 60:
         return 1
@@ -57,7 +53,6 @@ def clay_class(argila_percent: float) -> int:
 
 
 def ctc_range(ctc_cmolc_dm3: float) -> int:
-    """Tabela 6.1: return range index (1..4) for K interpretation."""
 
     if ctc_cmolc_dm3 <= 7.5:
         return 1
@@ -69,13 +64,11 @@ def ctc_range(ctc_cmolc_dm3: float) -> int:
 
 
 def clay_class_label(argila_percent: float) -> str:
-    """Return clay classification label following Tabela 6.1."""
 
     return f"Classe {clay_class(argila_percent)}"
 
 
 def classify_organic_matter(value_percent: float) -> ThreeLevelClass:
-    """Tabela 6.1: classify soil organic matter."""
 
     if value_percent <= 2.5:
         return ThreeLevelClass.BAIXO
@@ -85,7 +78,6 @@ def classify_organic_matter(value_percent: float) -> ThreeLevelClass:
 
 
 def classify_ctc_level(value_cmolc_dm3: float) -> str:
-    """Tabela 6.1: classify CTC availability."""
 
     mapping = {
         1: "Baixa",
@@ -97,7 +89,6 @@ def classify_ctc_level(value_cmolc_dm3: float) -> str:
 
 
 def p_mehlich3_to_mehlich1(value: float, argila_percent: float) -> float:
-    """Convert Mehlich-3 P to Mehlich-1 equivalent."""
 
     denom = 2.0 - (0.02 * argila_percent)
     if denom <= 0:
@@ -106,15 +97,8 @@ def p_mehlich3_to_mehlich1(value: float, argila_percent: float) -> float:
 
 
 def k_mehlich3_to_mehlich1(value: float) -> float:
-    """Convert Mehlich-3 K to Mehlich-1 equivalent."""
 
     return value * 0.83
-
-
-# ------------------------------------------------------------------------------
-# Interval helper used by table lookups
-# ------------------------------------------------------------------------------
-
 
 @dataclass(frozen=True)
 class Interval:
@@ -309,7 +293,7 @@ class SoilConditionSummary:
 
 
 class SoilDataError(Exception):
-    """Raised when metadata is insufficient to build the soil condition summary."""
+    """"""
 
 
 def _require_float(meta: Mapping[str, object], key: str, label: str) -> float:

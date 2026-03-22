@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from dataclasses import dataclass
 import math
@@ -99,7 +99,6 @@ SOIL_ANALYSIS_FIELDS = [
 ]
 SOIL_ANALYSIS_KEYS = [key for key, _ in SOIL_ANALYSIS_FIELDS]
 
-# Validation helper: prefilled soil samples for testing (easy to remove).
 SOIL_SAMPLE_OPTIONS = (
     "Analise 1",
     "Analise 2",
@@ -320,7 +319,6 @@ SHARED_FIELDS: list[FieldGeometry] = []
 
 
 class AddFieldsPage(BasePage):
-    """Load KMZ/KML files, list talhoes, and draw them on the canvas."""
 
     title = "Adicionar Talhões"
     CANVAS_BG = "#d8d8d8"
@@ -515,7 +513,7 @@ class AddFieldsPage(BasePage):
                 style="Card.TFrame",
             )
             card.pack(fill="x", pady=4)
-            card.field_index = index  # type: ignore[attr-defined]
+            card.field_index = index 
 
             header = ttk.Frame(card)
             header.pack(fill="x")
@@ -587,8 +585,7 @@ class AddFieldsPage(BasePage):
         def _handle_click(event, idx=index):
             if isinstance(event.widget, interactive_types):
                 return None
-            # Defer selection so widget-specific bindings (e.g., expand/collapse)
-            # run before the sidebar is rebuilt.
+            
             self.parent.after_idle(lambda: self._select_field(idx, False))
             return None
 
@@ -643,7 +640,6 @@ class AddFieldsPage(BasePage):
         self._world_scale = min(scale_x, scale_y)
         self._world_origin = ((min_x + max_x) / 2, (min_y + max_y) / 2)
 
-    # Canvas interaction -------------------------------------------------
     def _start_pan(self, event) -> None:
         self._drag_origin = (event.x, event.y, self.pan_x, self.pan_y)
         self._dragging = False
@@ -720,7 +716,6 @@ class AddFieldsPage(BasePage):
                 self._select_field(idx)
                 return
 
-    # Data handling ------------------------------------------------------
     def _handle_import(self) -> None:
         mode_choice = FieldModeDialog(self.parent).show()
         if mode_choice is None:
@@ -792,7 +787,6 @@ class AddFieldsPage(BasePage):
         else:
             self.municipality_var.set("Municipio: Selecione um talhao")
 
-    # Drawing ------------------------------------------------------------
     def _draw_placeholder(self) -> None:
         self.canvas.delete("placeholder")
         width = max(self.canvas.winfo_width(), 200)
@@ -966,7 +960,6 @@ class AddFieldsPage(BasePage):
         return x, y
 
 class FieldModeDialog:
-    """Prompt user to escolher o tipo de insercao."""
 
     def __init__(self, master) -> None:
         self.master = master
@@ -1032,7 +1025,6 @@ class FieldModeDialog:
 
 
 class BaseFormDialog:
-    """Base class for as janelas de cadastro de talhoes."""
 
     def __init__(
         self,
@@ -1242,7 +1234,7 @@ class BaseFormDialog:
         )
         ttk.Label(
             frame,
-            text="Padrao: 65000 plantas/ha. Informe outro valor se desejar.",
+            text="Padrao: 65 mil plantas/ha. Informe outro valor se desejar.",
         ).grid(
             row=1,
             column=1,

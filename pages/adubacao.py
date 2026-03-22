@@ -1,9 +1,4 @@
-"""
-Per-field fertilization workflow.
-"""
-
 from __future__ import annotations
-
 from collections.abc import Callable
 import re
 import tkinter as tk
@@ -40,7 +35,6 @@ from .add_fields import AddFieldsPage
 
 
 class AdubacaoPage(AddFieldsPage):
-    """Per-field fertilization configuration and recommendations."""
 
     title = "Adubacao"
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
@@ -357,6 +351,7 @@ class AdubacaoPage(AddFieldsPage):
         if canvas is not None and scroll_pos is not None:
             canvas.update_idletasks()
             canvas.yview_moveto(scroll_pos)
+
     def _render_form_section(self, card, field: FieldGeometry, index: int, text_kwargs) -> None:
         state = self._get_form_state(field)
         result = field.metadata.get("_adubacao_result")
@@ -923,7 +918,7 @@ class AdubacaoPage(AddFieldsPage):
             ajustar_n_rendimento=ajustar_n_rendimento,
             rotacao_soja=rotacao_soja,
             cultivo=cultivo,
-            uso_forrageira=uso_forrageira,  # type: ignore[arg-type]
+            uso_forrageira=uso_forrageira, 
             produtividade_ms_t_ha=produtividade_ms,
             ph_agua=ph_agua,
             metodo_aplicacao_mo=metodo_aplicacao_mo,
@@ -1655,3 +1650,6 @@ class AdubacaoPage(AddFieldsPage):
     def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
         r, g, b = (max(0, min(255, channel)) for channel in rgb)
         return f"#{int(r):02x}{int(g):02x}{int(b):02x}"
+
+
+##placehold

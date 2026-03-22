@@ -1,4 +1,3 @@
-"""Shared color palette helpers for field-based notebook pages."""
 
 from __future__ import annotations
 
@@ -17,7 +16,6 @@ DEFAULT_CULTURE_COLOR = "#d2d2d2"
 
 
 def color_for_culture(name: str | None) -> str:
-    """Return a stable color for the provided culture name."""
 
     if not name:
         return DEFAULT_CULTURE_COLOR

@@ -1,9 +1,4 @@
-"""
-Utilities to open KMZ/KML files and extract polygon coordinates.
-"""
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 import math
 from pathlib import Path
@@ -14,7 +9,6 @@ from xml.etree import ElementTree as ET
 
 @dataclass
 class FieldGeometry:
-    """Simple representation of a talhao polygon."""
 
     name: str
     coordinates: List[Tuple[float, float]]  # (lat, lon)
@@ -27,7 +21,6 @@ class FieldGeometry:
 
 
 class KMZLoader:
-    """Load talhao geometries from KMZ or KML files."""
 
     DEFAULT_NS = {"kml": "http://www.opengis.net/kml/2.2"}
 
@@ -124,10 +117,10 @@ class KMZLoader:
     def _estimate_area_hectares(coords: List[Tuple[float, float]]) -> float:
         if len(coords) < 3:
             return 0.0
-        # Simple equirectangular projection before shoelace formula
+
         avg_lat = sum(lat for lat, _ in coords) / len(coords)
         rad_lat = math.radians(avg_lat)
-        radius = 6378137.0  # meters
+        radius = 6378137.0 
         cos_lat = math.cos(rad_lat)
         projected = []
         for lat, lon in coords:
@@ -139,4 +132,4 @@ class KMZLoader:
             x1, y1 = projected[i]
             x2, y2 = projected[(i + 1) % len(projected)]
             area += x1 * y2 - x2 * y1
-        return abs(area) / 2 / 10000  # square meters to hectares
+        return abs(area) / 2 / 10000 

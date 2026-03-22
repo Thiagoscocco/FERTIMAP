@@ -1,9 +1,4 @@
-"""
-Second tab focusing on crop visualization and productivity info.
-"""
-
 from __future__ import annotations
-
 import tkinter as tk
 from tkinter import ttk
 
@@ -13,8 +8,7 @@ from .add_fields import AddFieldsPage
 
 
 class CultivosPage(AddFieldsPage):
-    """Read-only overview of talhoes highlighting crop-specific colors."""
-
+     
     title = "Cultivos"
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
     CARD_BODY_FONT = ("Bahnschrift", 10)
@@ -77,7 +71,7 @@ class CultivosPage(AddFieldsPage):
                 pady=10,
             )
             card.pack(fill="x", pady=4)
-            card.field_index = index  # type: ignore[attr-defined]
+            card.field_index = index  
 
             text_kwargs = {"bg": color, "fg": self._text_fg, "anchor": "w", "justify": "left"}
             wrap_width = self.SIDEBAR_WIDTH - 72

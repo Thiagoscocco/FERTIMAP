@@ -1,16 +1,10 @@
-"""
-Base classes for the modular tab/page system.
-"""
-
 from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from tkinter import ttk
 
 
 class BasePage(ABC):
-    """Basic contract for every top-level page."""
-
+    
     title: str = "Pagina"
 
     def __init__(self, parent: ttk.Frame, app) -> None:

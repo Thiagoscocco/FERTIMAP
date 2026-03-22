@@ -1,11 +1,4 @@
-"""
-Fertilization backend: fertilizer catalog + calculation pipeline.
-
-Ported from funcionamento_aba.py with minimal adjustments for FertiMap.
-"""
-
 from __future__ import annotations
-
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, Iterable, List, Optional, Tuple
@@ -16,7 +9,6 @@ KG_PER_SACK = 50.0
 
 @dataclass(slots=True)
 class FertilizerRequirement:
-    """Raw nutrient needs per hectare (kg/ha)."""
 
     nitrogen_kg_ha: float = 0.0
     p2o5_kg_ha: float = 0.0
@@ -27,7 +19,6 @@ class FertilizerRequirement:
 
 @dataclass(slots=True)
 class FertilizerResult:
-    """Final output used by the UI."""
 
     status: str = "idle"
     message: str = ""
@@ -127,7 +118,6 @@ FORMULADO_COMPLEMENTO_P = FOSFATADOS["TSP"]
 FORMULADO_COMPLEMENTO_K = POTASSICOS["KCl"]
 FORMULADO_COMPLEMENTO_N = NITROGENADOS["UREIA"]
 
-
 @dataclass
 class FertilizacaoResultado:
     produtos: List[Tuple[str, float]]
@@ -158,7 +148,6 @@ def obter_nitrogenado_por_nome(nome: str | None) -> Fertilizante | None:
     return _NITROGENADO_POR_NOME.get(nome) or _NITROGENADO_POR_NORMALIZED.get(
         chave
     )
-
 
 def obter_molibdato_por_nome(nome: str | None) -> Fertilizante | None:
     if not nome:
@@ -240,7 +229,6 @@ def calcular_formulado(
     complemento_mo: Fertilizante | None = None,
     kg_formulado_predefinido: float | None = None,
 ) -> FertilizacaoResultado:
-    """Calculate formulated fertilizer + complements."""
 
     produtos: List[Tuple[str, float]] = []
     formulados: List[Tuple[str, float]] = []
@@ -346,7 +334,6 @@ def calcular_individual_usuario(
     nitrogenado_codigo: str | None,
     molibdato_codigo: str | None = None,
 ) -> FertilizacaoResultado:
-    """Individual fertilizers selected by the user."""
 
     produtos: List[Tuple[str, float]] = []
     individuais: List[Tuple[str, float]] = []
@@ -442,7 +429,6 @@ def calcular_individual_usuario(
 def calcular_individual_software(
     demanda: Dict[str, float], molibdato_codigo: str | None = None
 ) -> FertilizacaoResultado:
-    """Automatic fertilizer selection used by the software."""
 
     produtos: List[Tuple[str, float]] = []
     individuais: List[Tuple[str, float]] = []
@@ -529,7 +515,6 @@ def calculate_fertilizers(
     mixed_sacks: Optional[float] = None,
     individual_selection: IndividualSelection = IndividualSelection.USER,
 ) -> FertilizerResult:
-    """Main pipeline called by the UI."""
 
     demanda = _make_demanda(requirement)
 
@@ -637,7 +622,6 @@ def format_products(
     por_area: bool = True,
     unit: str = "kg",
 ) -> str:
-    """Optional formatting helper replicated from FertiCalc."""
 
     def _format_value(value: float) -> str:
         if value >= 1000:

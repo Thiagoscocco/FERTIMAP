@@ -1,9 +1,4 @@
-"""
-Tab showing per-field liming configuration and recommendations.
-"""
-
 from __future__ import annotations
-
 from collections.abc import Callable
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -19,7 +14,6 @@ from .add_fields import AddFieldsPage
 
 
 class CalagemPage(AddFieldsPage):
-    """Per-field liming workflow."""
 
     title = "Calagem"
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
@@ -398,8 +392,6 @@ class CalagemPage(AddFieldsPage):
         fields: list[tuple[str, Callable[[ttk.Frame], ttk.Widget], int]],
         columns: int = 2,
     ) -> None:
-        """Render labeled widgets in a compact multi-column layout."""
-
         row_frame: ttk.Frame | None = None
         used_columns = 0
 
@@ -875,6 +867,15 @@ class CalagemPage(AddFieldsPage):
             fill="#2c3e50",
             tags=("overlay",),
         )
+        self.canvas.create_text(
+            grad_x1,
+            label_y,
+            text=f"(Maior) {self._format_per_ha_value(max_v)}",
+            anchor="e",
+            font=("Segoe UI", 8),
+            fill="#2c3e50",
+            tags=("overlay",),
+        )
         return (x0, y0, x1, y1)
 
     def _draw_total_box(
@@ -920,15 +921,6 @@ class CalagemPage(AddFieldsPage):
             text=self._format_total_value(self._total_dose, uppercase=True),
             anchor="w",
             font=("Segoe UI", 11),
-            fill="#2c3e50",
-            tags=("overlay",),
-        )
-        self.canvas.create_text(
-            grad_x1,
-            label_y,
-            text=f"(Maior) {self._format_per_ha_value(max_v)}",
-            anchor="e",
-            font=("Segoe UI", 8),
             fill="#2c3e50",
             tags=("overlay",),
         )

@@ -1,9 +1,4 @@
-"""
-Notebook tab focusing on soil condition classes derived from lab analyses.
-"""
-
 from __future__ import annotations
-
 from dataclasses import dataclass
 import re
 import tkinter as tk
@@ -28,7 +23,6 @@ class AttributeConfig:
 
 
 class SoilConditionsPage(AddFieldsPage):
-    """Display soil availability classes per talhao."""
 
     title = "Condicoes do solo"
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
@@ -144,7 +138,7 @@ class SoilConditionsPage(AddFieldsPage):
                 pady=10,
             )
             card.pack(fill="x", pady=4)
-            card.field_index = index  # type: ignore[attr-defined]
+            card.field_index = index 
 
             text_kwargs = {"bg": color, "fg": self._text_fg, "anchor": "w", "justify": "left"}
             header = tk.Frame(card, bg=color)

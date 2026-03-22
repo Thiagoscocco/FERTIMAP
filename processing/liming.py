@@ -1,19 +1,9 @@
-"""
-Liming recommendation helpers derived from the RS/SC manual (chapter 5).
-
-This module mirrors the behaviour of ``calagem.py`` located at the project root
-and is tailored for consumption by the Tk pages.
-"""
-
 from __future__ import annotations
-
 from dataclasses import dataclass
 from enum import Enum
 from typing import Dict, List, Optional
 
-
 class LimingMethod(str, Enum):
-    """Method selected by the agronomic rules."""
 
     SMP_TABLE = "SMP (Tabela 5.2)"
     V_PERCENT = "Saturacao por bases (V%)"
@@ -21,7 +11,6 @@ class LimingMethod(str, Enum):
 
 
 class ManagementScenario(str, Enum):
-    """Supported management scenarios (subset of tables 5.3 and 5.4)."""
 
     CONVENCIONAL_GRAOS = "Convencional (graos)"
     IMPLANTACAO_PD_GRAOS = "Implantacao de plantio direto (graos)"
@@ -40,9 +29,8 @@ class LimingRecommendation:
 
 
 class LimingError(Exception):
-    """Raised when there is not enough information to compute the dose."""
-
-
+    """"""
+    
 _SMP_TABLE: Dict[float, Dict[float, float]] = {
     4.4: {5.5: 15.0, 6.0: 21.0, 6.5: 29.0},
     4.5: {5.5: 12.5, 6.0: 17.3, 6.5: 24.0},

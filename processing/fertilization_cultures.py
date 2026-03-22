@@ -1,11 +1,4 @@
-"""
-Culture-specific fertilization requirements (N, P2O5, K2O, S, Mo).
-
-Ported from adubacao_culturas_backend.py (ASCII-only).
-"""
-
 from __future__ import annotations
-
 from dataclasses import dataclass
 from typing import Literal, Optional
 
@@ -198,7 +191,6 @@ def adubacao_milho(
 
     return {"N": round(n_base, 1), "P2O5": p_base, "K2O": k_base}
 
-
 def adubacao_soja(
     classe_p: ClasseSolo,
     classe_k: ClasseSolo,
@@ -223,14 +215,12 @@ def adubacao_soja(
     if metodo not in {"foliar", "semente"}:
         metodo = "foliar"
 
-    # Mo para soja: 1o cultivo + MO baixa/media + pH < 5.5.
     if cultivo == 1 and ph_agua is not None and ph_agua < 5.5:
         if teor_mo_percent <= 2.5:
             mo = 0.050 if metodo == "foliar" else 0.025
         elif teor_mo_percent <= 5.0:
             mo = 0.025 if metodo == "foliar" else 0.012
 
-    # Solo arenoso (classe 4): aumentar dose em 40%.
     if mo > 0 and argila_classe == 4:
         mo *= 1.4
 

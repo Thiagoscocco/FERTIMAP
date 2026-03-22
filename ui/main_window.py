@@ -1,9 +1,4 @@
-"""
-Main TkBootstrap window hosting the notebook pages.
-"""
-
 from __future__ import annotations
-
 from tkinter import ttk
 
 import ttkbootstrap as tb
@@ -17,7 +12,6 @@ from pages.adubacao import AdubacaoPage
 
 
 class FerticalcApp(tb.Window):
-    """TkBootstrap application shell."""
 
     def __init__(self) -> None:
         super().__init__(title="FertiCalc", themename="litera")
@@ -44,7 +38,6 @@ class FerticalcApp(tb.Window):
         ):
             self._add_page(page_cls)
 
-        # Ensure the first page receives a refresh call.
         self.after(50, self._refresh_current_page)
 
     def _add_page(self, page_cls: type[BasePage]) -> None:
@@ -64,7 +57,6 @@ class FerticalcApp(tb.Window):
             page.refresh()
 
     def run(self) -> None:
-        """Start Tk mainloop."""
         self.mainloop()
 
     def _maximize_window(self) -> None:
