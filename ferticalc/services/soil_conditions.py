@@ -1,10 +1,3 @@
-"""
-Soil condition helpers derived from the RS/SC fertilization manual (2016).
-
-This module mirrors the rules from ``condicoes.py`` provided in the project root
-and exposes utilities tailored for the notebook pages.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,11 +22,6 @@ class ThreeLevelClass(str, Enum):
     BAIXO = "Baixo"
     MEDIO = "Medio"
     ALTO = "Alto"
-
-
-# ------------------------------------------------------------------------------
-# Utility functions reused across the calculations
-# ------------------------------------------------------------------------------
 
 
 def _sanitize_float(value: object) -> Optional[float]:
@@ -151,11 +139,6 @@ class Interval:
                 if value >= self.maximo:
                     return False
         return True
-
-
-# ------------------------------------------------------------------------------
-# Table-driven classification logic (copied from condicoes.py, ASCII only)
-# ------------------------------------------------------------------------------
 
 
 _P_GRUPO2 = {
@@ -308,11 +291,6 @@ def classify_mn(value: float) -> ThreeLevelClass:
     if value <= 5.0:
         return ThreeLevelClass.MEDIO
     return ThreeLevelClass.ALTO
-
-
-# ------------------------------------------------------------------------------
-# Aggregators and dataclasses consumed by the UI layer
-# ------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)

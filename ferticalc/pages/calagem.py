@@ -514,7 +514,10 @@ class CalagemPage(AddFieldsPage):
                 self._manual_expanded.remove(index)
                 if self._auto_expanded_index == index:
                     self._auto_expanded_index = None
-                self._refresh_field_cards()
+                if self.selected_index == index:
+                    self._select_field(None)
+                else:
+                    self._refresh_field_cards()
             else:
                 self._auto_expanded_index = None
                 self._select_field(None)

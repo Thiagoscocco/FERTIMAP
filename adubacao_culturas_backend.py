@@ -205,9 +205,6 @@ def adubacao_milho(
     if produtividade_t_ha > 6:
         n_base += 15 * (produtividade_t_ha - 6)
 
-    if produtividade_t_ha > 10:
-        n_base *= 1.3
-
     # Ajuste por densidade
     if densidade_plantas_ha and densidade_plantas_ha > 65000:
         n_base += ((densidade_plantas_ha - 65000) / 5000) * 10

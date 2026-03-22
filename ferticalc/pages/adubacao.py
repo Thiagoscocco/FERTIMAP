@@ -57,6 +57,8 @@ class AdubacaoPage(AddFieldsPage):
     CULTIVO_OPTIONS = ("1", "2")
     NEED_METRIC_LABELS = ("Nitrogenio", "Fosforo", "Potassio", "Enxofre", "Molibdenio")
     EMPTY_OPTION = "Vazio"
+    DOSE_METRIC_OPTIONS = ("Dose", "Total no talhao")
+    SHOW_FERTILIZER_VIEWER = False
     UNIT_OPTIONS = (
         ("Quilos (kg)", "kg"),
         ("Toneladas (t)", "t"),
@@ -85,6 +87,8 @@ class AdubacaoPage(AddFieldsPage):
         self._need_metric_var.trace_add("write", self._on_metric_change)
         self._fert_metric_var = tk.StringVar(value=self.EMPTY_OPTION)
         self._fert_metric_var.trace_add("write", self._on_metric_change)
+        self._dose_metric_var = tk.StringVar(value=self.EMPTY_OPTION)
+        self._dose_metric_var.trace_add("write", self._on_metric_change)
         self._unit_var = tk.StringVar(value=self.UNIT_OPTIONS[0][0])
         self._unit_var.trace_add("write", self._on_unit_change)
         self._need_metric_options: list[str] = [self.EMPTY_OPTION, *self.NEED_METRIC_LABELS]
@@ -92,6 +96,7 @@ class AdubacaoPage(AddFieldsPage):
         self._fert_metric_map: dict[str, str] = {}
         self._metric_range: tuple[float, float] | None = None
         self._total_metric: float = 0.0
+        self._npk_range: tuple[float, float] | None = None
 
     @staticmethod
     def _combo_label(text: str) -> str:
@@ -151,24 +156,44 @@ class AdubacaoPage(AddFieldsPage):
         )
         self._need_metric_combo.pack(fill="x", pady=(10, 0))
 
-        fert_container = ttk.LabelFrame(
+        if self.SHOW_FERTILIZER_VIEWER:
+            fert_container = ttk.LabelFrame(
+                self.sidebar_inner,
+                text="Visualizacao dos fertilizantes",
+                padding=(12, 8),
+            )
+            fert_container.pack(fill="x", padx=(6, 2), pady=(0, 12))
+            ttk.Label(
+                fert_container,
+                text="Escolha o fertilizante que deseja visualizar nos talhoes.",
+                wraplength=self.SIDEBAR_WIDTH - 60,
+            ).pack(anchor="w")
+            self._fert_metric_combo = ttk.Combobox(
+                fert_container,
+                state="readonly",
+                values=self._fert_metric_options,
+                textvariable=self._fert_metric_var,
+            )
+            self._fert_metric_combo.pack(fill="x", pady=(10, 0))
+
+        dose_container = ttk.LabelFrame(
             self.sidebar_inner,
-            text="Visualizacao dos fertilizantes",
+            text="Visualizacao da adubacao",
             padding=(12, 8),
         )
-        fert_container.pack(fill="x", padx=(6, 2), pady=(0, 12))
+        dose_container.pack(fill="x", padx=(6, 2), pady=(0, 12))
         ttk.Label(
-            fert_container,
-            text="Escolha o fertilizante que deseja visualizar nos talhoes.",
+            dose_container,
+            text="Escolha como visualizar as doses de fertilizantes nos talhoes.",
             wraplength=self.SIDEBAR_WIDTH - 60,
         ).pack(anchor="w")
-        self._fert_metric_combo = ttk.Combobox(
-            fert_container,
+        self._dose_metric_combo = ttk.Combobox(
+            dose_container,
             state="readonly",
-            values=self._fert_metric_options,
-            textvariable=self._fert_metric_var,
+            values=[self.EMPTY_OPTION, *self.DOSE_METRIC_OPTIONS],
+            textvariable=self._dose_metric_var,
         )
-        self._fert_metric_combo.pack(fill="x", pady=(10, 0))
+        self._dose_metric_combo.pack(fill="x", pady=(10, 0))
 
     def _on_metric_change(self, *_args) -> None:
         if not hasattr(self, "field_cards_frame"):
@@ -205,6 +230,8 @@ class AdubacaoPage(AddFieldsPage):
         ).pack(anchor="e", pady=(2, 0))
 
     def _refresh_field_cards(self) -> None:
+        canvas = self.sidebar_canvas
+        scroll_pos = canvas.yview()[0] if canvas else None
         self._update_metric_options()
         self._update_metric_stats()
         self._manual_expanded = {
@@ -233,6 +260,9 @@ class AdubacaoPage(AddFieldsPage):
                 anchor="w",
                 wraplength=self.SIDEBAR_WIDTH - 48,
             ).pack(fill="x", pady=8)
+            if canvas is not None and scroll_pos is not None:
+                canvas.update_idletasks()
+                canvas.yview_moveto(scroll_pos)
             return
 
         for index, field in enumerate(self.fields):
@@ -303,6 +333,9 @@ class AdubacaoPage(AddFieldsPage):
             self._bind_card_selection(card, index)
 
         self._highlight_selected_card()
+        if canvas is not None and scroll_pos is not None:
+            canvas.update_idletasks()
+            canvas.yview_moveto(scroll_pos)
     def _render_form_section(self, card, field: FieldGeometry, index: int, text_kwargs) -> None:
         state = self._get_form_state(field)
         result = field.metadata.get("_adubacao_result")
@@ -671,7 +704,7 @@ class AdubacaoPage(AddFieldsPage):
             card.configure(highlightbackground=outline, highlightthickness=thickness)
 
     def _field_color(self, field: FieldGeometry, index: int) -> str:
-        return self._metric_color(field)
+        return self._npk_color(field)
 
     def _field_fill_color(self, base_color: str, is_selected: bool) -> str:
         if base_color == self.COLOR_NO_DATA or is_selected:
@@ -697,7 +730,10 @@ class AdubacaoPage(AddFieldsPage):
                 self._manual_expanded.remove(index)
                 if self._auto_expanded_index == index:
                     self._auto_expanded_index = None
-                self._refresh_field_cards()
+                if self.selected_index == index:
+                    self._select_field(None)
+                else:
+                    self._refresh_field_cards()
             else:
                 self._auto_expanded_index = None
                 self._select_field(None)
@@ -872,6 +908,7 @@ class AdubacaoPage(AddFieldsPage):
             for item in self.canvas.find_withtag(f"field-{index}"):
                 if "label" in self.canvas.gettags(item):
                     self.canvas.itemconfigure(item, text=label)
+        self.canvas.tag_raise("label", "field")
 
     def _canvas_label(self, field: FieldGeometry) -> str:
         lines = [field.name]
@@ -881,6 +918,8 @@ class AdubacaoPage(AddFieldsPage):
         fert_line = self._fert_metric_line(field)
         if fert_line:
             lines.append(self._uppercase_label_line(fert_line))
+        for line in self._dose_metric_lines(field):
+            lines.append(self._uppercase_label_line(line))
         return "\n".join(lines)
 
     def _enable_edit_mode(self, index: int) -> None:
@@ -982,6 +1021,20 @@ class AdubacaoPage(AddFieldsPage):
             return None
         return float(result.get("requirement", {}).get(key, 0.0))
 
+    def _npk_value(self, field: FieldGeometry) -> float | None:
+        meta = field.metadata or {}
+        result = meta.get("_adubacao_result")
+        if not result:
+            return None
+        req = result.get("requirement", {})
+        try:
+            n = float(req.get("N", 0.0))
+            p = float(req.get("P2O5", 0.0))
+            k = float(req.get("K2O", 0.0))
+        except (TypeError, ValueError):
+            return None
+        return n + p + k
+
     def _fert_metric_value(self, field: FieldGeometry) -> float | None:
         meta = field.metadata or {}
         result = meta.get("_adubacao_result")
@@ -1013,17 +1066,44 @@ class AdubacaoPage(AddFieldsPage):
             return f"{label}: Aguardando calculo"
         return f"{label}: {self._format_per_ha_value(value)}"
 
+    def _dose_metric_lines(self, field: FieldGeometry) -> list[str]:
+        label = self._dose_metric_var.get()
+        if label.strip().lower() == self.EMPTY_OPTION.lower():
+            return []
+        meta = field.metadata or {}
+        result = meta.get("_adubacao_result")
+        if not result:
+            return [f"{label}: Aguardando calculo"]
+        produtos = result.get("produtos", [])
+        if not produtos:
+            return [f"{label}: Nenhum fertilizante"]
+        lines: list[str] = []
+        if label == self.DOSE_METRIC_OPTIONS[0]:
+            for nome, quantidade in produtos:
+                lines.append(f"{nome}: {self._format_per_ha_value(quantidade)}")
+        else:
+            for nome, quantidade in produtos:
+                total = float(quantidade) * field.area_ha
+                lines.append(f"{nome}: {self._format_total_value(total)}")
+        return lines
+
     def _update_metric_stats(self) -> None:
         values: list[float] = []
         total = 0.0
+        npk_values: list[float] = []
         for field in self.fields:
             value = self._need_metric_value(field)
             if value is None:
-                continue
-            values.append(value)
-            total += value * field.area_ha
+                pass
+            else:
+                values.append(value)
+                total += value * field.area_ha
+            npk_value = self._npk_value(field)
+            if npk_value is not None:
+                npk_values.append(npk_value)
         self._metric_range = (min(values), max(values)) if values else None
         self._total_metric = total
+        self._npk_range = (min(npk_values), max(npk_values)) if npk_values else None
 
     def _render_canvas_overlays(self, width: int, height: int) -> None:
         super()._render_canvas_overlays(width, height)
@@ -1183,10 +1263,32 @@ class AdubacaoPage(AddFieldsPage):
             return self.COLOR_NO_DATA
         return self._color_for_value(numeric)
 
+    def _npk_color(self, field: FieldGeometry) -> str:
+        value = self._npk_value(field)
+        if value is None:
+            return self.COLOR_NO_DATA
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return self.COLOR_NO_DATA
+        return self._color_for_npk_value(numeric)
+
     def _color_for_value(self, value: float) -> str:
         if not self._metric_range:
             return self._rgb_to_hex(self.COLOR_LOW)
         min_v, max_v = self._metric_range
+        if max_v <= min_v:
+            ratio = 0.0
+        else:
+            ratio = (value - min_v) / (max_v - min_v)
+        ratio = max(0.0, min(1.0, ratio))
+        rgb = self._interpolate_color(self.COLOR_LOW, self.COLOR_HIGH, ratio)
+        return self._rgb_to_hex(rgb)
+
+    def _color_for_npk_value(self, value: float) -> str:
+        if not self._npk_range:
+            return self._rgb_to_hex(self.COLOR_LOW)
+        min_v, max_v = self._npk_range
         if max_v <= min_v:
             ratio = 0.0
         else:

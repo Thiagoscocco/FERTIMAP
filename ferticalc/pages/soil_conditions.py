@@ -37,20 +37,43 @@ class SoilConditionsPage(AddFieldsPage):
     SOIL_CHARACTERISTIC_CODES = ("ARGILA", "MO", "CTC")
     MACRO_CODES = ("P", "K", "Ca", "Mg", "S")
     MICRO_CODES = ("Zn", "Cu", "B", "Mn")
+    INTERPRETATION_META_KEY = "__interpretacoes__"
     ATTRIBUTE_CONFIGS: dict[str, AttributeConfig] = {
         "argila": AttributeConfig("Argila", "argila", 10.0, 30.0, 40.0, decimals=0, unit="%"),
-        "mo": AttributeConfig("M.o", "mo", 0.3, 3.0, 60.0, unit="%"),
-        "ctc": AttributeConfig("Ctc", "ctc", 0.8, 30.0, 40.0, unit="cmol/dm³"),
+        "mo": AttributeConfig("M.O", "mo", 0.3, 3.0, 60.0, unit="%"),
+        "ctc": AttributeConfig("CTC", "ctc", 0.8, 30.0, 40.0, unit="cmol/dm³"),
         "p": AttributeConfig("Fosforo", "p", 0.0, 30.0, 70.0, unit="mg/dm³"),
         "k": AttributeConfig("Potassio", "k", 15.0, 100.0, 220.0, decimals=0, unit="mg/dm³"),
+        "interpretacoes_npk": AttributeConfig(
+            "Interpretacoes dos Nutrientes",
+            INTERPRETATION_META_KEY,
+            0.0,
+            0.5,
+            1.0,
+            include_blue=False,
+            decimals=2,
+        ),
         "s": AttributeConfig("Enxofre", "s", 0.5, 6.0, 6.0, include_blue=False, unit="mg/dm³"),
         "cu": AttributeConfig("Cobre", "cu", 0.1, 0.8, 0.8, include_blue=False, decimals=2, unit="mg/dm³"),
         "zn": AttributeConfig("Zinco", "zn", 0.2, 0.8, 0.8, include_blue=False, decimals=2, unit="mg/dm³"),
         "b": AttributeConfig("Boro", "b", 0.0, 0.4, 0.4, include_blue=False, decimals=2, unit="mg/dm³"),
         "mn": AttributeConfig("Manganes", "mn", 1.0, 6.0, 6.0, include_blue=False, unit="mg/dm³"),
-        "ph": AttributeConfig("Ph", "ph", 4.0, 5.6, 8.0),
+        "ph": AttributeConfig("pH", "ph", 4.0, 5.6, 8.0),
     }
-    ATTRIBUTE_ORDER = ("argila", "mo", "ctc", "p", "k", "s", "cu", "zn", "b", "mn", "ph")
+    ATTRIBUTE_ORDER = (
+        "argila",
+        "mo",
+        "ctc",
+        "p",
+        "k",
+        "interpretacoes_npk",
+        "s",
+        "cu",
+        "zn",
+        "b",
+        "mn",
+        "ph",
+    )
     COLOR_RED = (187, 45, 33)
     COLOR_GREEN = (64, 168, 96)
     COLOR_BLUE = (46, 109, 196)
@@ -291,6 +314,8 @@ class SoilConditionsPage(AddFieldsPage):
     def _attribute_display(
         self, field: FieldGeometry, config: AttributeConfig
     ) -> tuple[str, str]:
+        if config.meta_key == self.INTERPRETATION_META_KEY:
+            return self._interpretations_display(field)
         metadata = field.metadata or {}
         raw_value = metadata.get(config.meta_key)
         parsed = self._parse_attribute_value(raw_value)
@@ -298,6 +323,54 @@ class SoilConditionsPage(AddFieldsPage):
             return self.COLOR_PINK, "Sem informacoes"
         color = self._attribute_color_for_value(parsed, config)
         return color, self._format_attribute_value(parsed, config.decimals, config.unit)
+
+    def _interpretations_display(self, field: FieldGeometry) -> tuple[str, str]:
+        metadata = field.metadata or {}
+        try:
+            summary = summarize_from_metadata(metadata)
+        except SoilDataError:
+            return self.COLOR_PINK, "Sem informacoes"
+
+        p_elem = summary.elements.get("P")
+        k_elem = summary.elements.get("K")
+        mo_elem = summary.elements.get("MO")
+        if not p_elem or not k_elem or not mo_elem:
+            return self.COLOR_PINK, "Sem informacoes"
+
+        mo_value = mo_elem.value
+        if mo_value <= 2.5:
+            mo_label = "M.O Baixa"
+            mo_score = 0.0
+        elif mo_value <= 5.0:
+            mo_label = "M.O Media"
+            mo_score = 0.5
+        else:
+            mo_label = "M.O Alta"
+            mo_score = 1.0
+
+        p_score = self._availability_score(p_elem.clazz)
+        k_score = self._availability_score(k_elem.clazz)
+        if p_score is None or k_score is None:
+            return self.COLOR_PINK, "Sem informacoes"
+
+        score = (p_score + k_score + mo_score) / 3.0
+        rgb = self._interpolate_color(self.COLOR_RED, self.COLOR_GREEN, score)
+        color = self._rgb_to_hex(rgb)
+        label = f"N: {mo_label}\nP: {p_elem.clazz}\nK: {k_elem.clazz}"
+        return color, label
+
+    @staticmethod
+    def _availability_score(label: str) -> float | None:
+        text = label.strip().lower()
+        mapping = {
+            "muito baixo": 0.0,
+            "baixo": 0.25,
+            "medio": 0.5,
+            "médio": 0.5,
+            "alto": 0.75,
+            "muito alto": 1.0,
+        }
+        return mapping.get(text)
 
     @staticmethod
     def _parse_attribute_value(raw_value: object) -> float | None:
