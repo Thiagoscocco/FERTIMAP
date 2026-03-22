@@ -5,12 +5,12 @@ Prototipo inicial do FertiCalc em TkBootstrap inspirado no layout do EasyIOP.
 ## Estrutura
 
 - `main.py` - ponto de entrada que inicia a aplicacao TkBootstrap.
-- `ferticalc/ui/main_window.py` - shell principal com o `Notebook` que hospeda cada aba.
-- `ferticalc/pages/base_page.py` - contrato simples para todas as abas.
-- `ferticalc/pages/add_fields.py` - primeira aba ("Adicionar talhoes") com canvas a esquerda e painel lateral a direita.
-- `ferticalc/services/kmz_loader.py` - leitura de arquivos KMZ/KML e extracao de poligonos.
+- `ui/main_window.py` - shell principal com o `Notebook` que hospeda cada aba.
+- `ui/base_page.py` - contrato simples para todas as abas.
+- `pages/add_fields.py` - primeira aba ("Adicionar talhoes") com canvas a esquerda e painel lateral a direita.
+- `processing/kmz_loader.py` - leitura de arquivos KMZ/KML e extracao de poligonos.
 
-Cada nova aba principal deve ganhar um modulo em `ferticalc/pages/` e ser registrada em `ferticalc/ui/main_window.py`.
+Cada nova aba principal deve ganhar um modulo em `pages/` e ser registrada em `ui/main_window.py`.
 
 ## Preparacao
 

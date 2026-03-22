@@ -8,8 +8,8 @@ from collections.abc import Callable
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from ..services.kmz_loader import FieldGeometry
-from ..services.liming import (
+from processing.kmz_loader import FieldGeometry
+from processing.liming import (
     LimingError,
     LimingMethod,
     ManagementScenario,

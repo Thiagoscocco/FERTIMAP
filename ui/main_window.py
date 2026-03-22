@@ -8,12 +8,12 @@ from tkinter import ttk
 
 import ttkbootstrap as tb
 
-from ..pages.add_fields import AddFieldsPage
-from ..pages.base_page import BasePage
-from ..pages.cultivos import CultivosPage
-from ..pages.soil_conditions import SoilConditionsPage
-from ..pages.calagem import CalagemPage
-from ..pages.adubacao import AdubacaoPage
+from pages.add_fields import AddFieldsPage
+from ui.base_page import BasePage
+from pages.cultivos import CultivosPage
+from pages.soil_conditions import SoilConditionsPage
+from pages.calagem import CalagemPage
+from pages.adubacao import AdubacaoPage
 
 
 class FerticalcApp(tb.Window):

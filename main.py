@@ -1,6 +1,6 @@
 """Entry point for the FertiCalc UI prototype."""
 
-from ferticalc import FerticalcApp
+from ui.main_window import FerticalcApp
 
 
 def main() -> None:

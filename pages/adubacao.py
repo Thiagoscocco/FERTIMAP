@@ -9,7 +9,7 @@ import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 
-from ..services.fertilization import (
+from processing.fertilizers import (
     FOSFATADOS,
     MOLIBDATOS,
     NITROGENADOS,
@@ -28,14 +28,14 @@ from ..services.fertilization import (
     obter_potassico_por_nome,
     obter_nitrogenado_por_nome,
 )
-from ..services.fertilization_cultures import (
+from processing.fertilization_cultures import (
     CultureRequirement,
     CulturaAntecedente,
     UsoForrageira,
     requirement_from_summary,
 )
-from ..services.kmz_loader import FieldGeometry
-from ..services.soil_conditions import SoilDataError, summarize_from_metadata
+from processing.kmz_loader import FieldGeometry
+from processing.soil_conditions import SoilDataError, summarize_from_metadata
 from .add_fields import AddFieldsPage
 
 

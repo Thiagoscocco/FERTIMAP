@@ -7,8 +7,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from ..services.field_colors import color_for_culture
-from ..services.kmz_loader import FieldGeometry
+from processing.field_colors import color_for_culture
+from processing.kmz_loader import FieldGeometry
 from .add_fields import AddFieldsPage
 
 
