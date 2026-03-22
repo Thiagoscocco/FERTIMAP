@@ -19,10 +19,13 @@ class CultivosPage(AddFieldsPage):
     CARD_TITLE_FONT = ("Bahnschrift", 11, "bold")
     CARD_BODY_FONT = ("Bahnschrift", 10)
     CARD_EMPH_FONT = ("Bahnschrift", 9, "italic")
+    CARD_SECTION_FONT = ("Bahnschrift", 9, "bold")
 
     def __init__(self, parent: ttk.Frame, app) -> None:
         super().__init__(parent, app)
         self._text_fg = "#1f1f1f"
+        self._manual_expanded: set[int] = set()
+        self._auto_expanded_index: int | None = None
 
     def _build_sidebar_content(self) -> None:
         ttk.Label(
@@ -42,6 +45,13 @@ class CultivosPage(AddFieldsPage):
         self._render_fields()
 
     def _refresh_field_cards(self) -> None:
+        self._manual_expanded = {
+            idx for idx in self._manual_expanded if 0 <= idx < len(self.fields)
+        }
+        if self._auto_expanded_index is not None and not (
+            0 <= self._auto_expanded_index < len(self.fields)
+        ):
+            self._auto_expanded_index = None
         for child in self.field_cards_frame.winfo_children():
             child.destroy()
         if not self.fields:
@@ -55,6 +65,7 @@ class CultivosPage(AddFieldsPage):
 
         for index, field in enumerate(self.fields):
             color = self._field_color(field, index)
+            expanded = self._is_card_expanded(index)
             card = tk.Frame(
                 self.field_cards_frame,
                 bg=color,
@@ -69,12 +80,29 @@ class CultivosPage(AddFieldsPage):
             card.field_index = index  # type: ignore[attr-defined]
 
             text_kwargs = {"bg": color, "fg": self._text_fg, "anchor": "w", "justify": "left"}
+            wrap_width = self.SIDEBAR_WIDTH - 72
+            header = tk.Frame(card, bg=color)
+            header.pack(fill="x")
             tk.Label(
-                card,
+                header,
                 text=field.name,
                 font=self.CARD_TITLE_FONT,
                 **text_kwargs,
-            ).pack(anchor="w")
+            ).pack(side="left", anchor="w")
+            toggle_label = tk.Label(
+                header,
+                text="-" if expanded else "+",
+                bg=color,
+                fg=self._text_fg,
+                font=("Segoe UI", 12, "bold"),
+                cursor="hand2",
+                padx=6,
+            )
+            toggle_label.pack(side="right")
+            toggle_label.bind(
+                "<Button-1>",
+                lambda event, idx=index: self._handle_toggle_click(idx),
+            )
             crop_name = field.cultivation or "Nao informado"
             tk.Label(
                 card,
@@ -82,23 +110,107 @@ class CultivosPage(AddFieldsPage):
                 font=self.CARD_BODY_FONT,
                 **text_kwargs,
             ).pack(anchor="w", pady=(4, 0))
-            tk.Label(
-                card,
-                text=f"Area: {field.area_ha:.2f} ha",
-                font=self.CARD_BODY_FONT,
-                **text_kwargs,
-            ).pack(anchor="w")
-            produtividade = (
-                field.productivity
-                or field.metadata.get("produtividade", "")
-                or "Nao informado"
-            )
-            tk.Label(
-                card,
-                text=f"Produtividade esperada: {produtividade}",
-                font=self.CARD_EMPH_FONT,
-                **text_kwargs,
-            ).pack(anchor="w", pady=(4, 0))
+            if expanded:
+                tk.Label(
+                    card,
+                    text="Resumo do talhao",
+                    font=self.CARD_SECTION_FONT,
+                    **text_kwargs,
+                ).pack(anchor="w", pady=(8, 4))
+                tk.Label(
+                    card,
+                    text=f"Area: {field.area_ha:.2f} ha",
+                    font=self.CARD_BODY_FONT,
+                    **text_kwargs,
+                ).pack(anchor="w", pady=(0, 4))
+                produtividade = self._format_productivity(
+                    field.productivity or field.metadata.get("produtividade", "")
+                )
+                tk.Label(
+                    card,
+                    text=f"Produtividade esperada: {produtividade}",
+                    font=self.CARD_EMPH_FONT,
+                    **text_kwargs,
+                ).pack(anchor="w", pady=(0, 8))
+
+                if crop_name.strip().lower().startswith("milh"):
+                    meta = field.metadata or {}
+                    tk.Label(
+                        card,
+                        text="Parametros do cultivo",
+                        font=self.CARD_SECTION_FONT,
+                        **text_kwargs,
+                    ).pack(anchor="w", pady=(8, 4))
+                    rotacao = (meta.get("rotacao_soja") or "").strip().lower()
+                    if rotacao in {"sim", "s", "yes", "true", "1"}:
+                        tk.Label(
+                            card,
+                            text="Rotacao anual com soja: Sim",
+                            font=self.CARD_BODY_FONT,
+                            wraplength=wrap_width,
+                            **text_kwargs,
+                        ).pack(anchor="w", pady=(0, 4))
+                    densidade = (meta.get("densidade_plantas_ha") or "").strip()
+                    if densidade:
+                        tk.Label(
+                            card,
+                            text=f"Densidade de plantas: {densidade} plantas/ha",
+                            font=self.CARD_BODY_FONT,
+                            wraplength=wrap_width,
+                            **text_kwargs,
+                        ).pack(anchor="w", pady=(0, 4))
+
+                    sistema = (meta.get("sistema_cultivo") or "Convencional").strip()
+                    tk.Label(
+                        card,
+                        text=f"Sistema de cultivo: {sistema}",
+                        font=self.CARD_BODY_FONT,
+                        wraplength=wrap_width,
+                        **text_kwargs,
+                    ).pack(anchor="w", pady=(0, 8))
+
+                    antecedente = (meta.get("cultura_antecedente") or "").strip().lower()
+                    manejo_lines: list[str] = []
+                    if sistema.lower().startswith("conv"):
+                        manejo_lines = [
+                            "Aplicar 10 a 30 kg N/ha na semeadura.",
+                            "Aplicar o restante a lanco em V4 ou V6 (40 a 60 cm).",
+                            "Se chuvas intensas ou dose de N elevada, dividir em 3 aplicacoes",
+                            "com intervalos de 15 a 30 dias.",
+                        ]
+                    elif sistema.lower().startswith("plantio"):
+                        if antecedente.startswith("gra"):
+                            manejo_lines.append(
+                                "Aplicar 20 a 40 kg N/ha na semeadura."
+                            )
+                        if antecedente.startswith("leg"):
+                            manejo_lines.append(
+                                "Aplicar 10 a 20 kg N/ha na semeadura."
+                            )
+                        manejo_lines.extend(
+                            [
+                                "Aplicar metade da dose em V4 a V6 e a outra metade em V8 a V9.",
+                                "Se chuvas intensas ou dose de N elevada, dividir em 3 aplicacoes",
+                                "com intervalos de 15 a 30 dias.",
+                            ]
+                        )
+
+                    if manejo_lines:
+                        tk.Label(
+                            card,
+                            text="INFORMACOES DE ADUBACAO",
+                            font=self.CARD_SECTION_FONT,
+                            wraplength=wrap_width,
+                            **text_kwargs,
+                        ).pack(anchor="w", pady=(6, 4))
+                        for line in manejo_lines:
+                            tk.Label(
+                                card,
+                                text=line,
+                                font=self.CARD_BODY_FONT,
+                                wraplength=wrap_width,
+                                **text_kwargs,
+                            ).pack(anchor="w", pady=(0, 4))
 
             self._bind_card_selection(card, index)
 
@@ -113,6 +225,42 @@ class CultivosPage(AddFieldsPage):
             outline = "#2c3e50" if selected else "#b6b6b6"
             thickness = 3 if selected else 1
             card.configure(highlightbackground=outline, highlightthickness=thickness)
+
+    def _select_field(self, index: int | None, _sync_tree: bool = False) -> None:
+        self._auto_expanded_index = index
+        super()._select_field(index, _sync_tree)
+        self._refresh_field_cards()
+
+    def _is_card_expanded(self, index: int) -> bool:
+        return index in self._manual_expanded or self._auto_expanded_index == index
+
+    def _handle_toggle_click(self, index: int) -> str:
+        expanded = self._is_card_expanded(index)
+        pinned = index in self._manual_expanded
+        if not expanded:
+            self._manual_expanded.add(index)
+            self._refresh_field_cards()
+        else:
+            if pinned:
+                self._manual_expanded.remove(index)
+                if self._auto_expanded_index == index:
+                    self._auto_expanded_index = None
+                if self.selected_index == index:
+                    self._select_field(None)
+                else:
+                    self._refresh_field_cards()
+            else:
+                self._select_field(None)
+        return "break"
+
+    @staticmethod
+    def _format_productivity(value: str | None) -> str:
+        text = value or "Nao informado"
+        if isinstance(text, str):
+            low = text.lower()
+            if text != "Nao informado" and "t/ha" not in low and "sc" not in low and "saca" not in low:
+                text = f"{text} t/ha"
+        return text
 
     def _field_color(self, field: FieldGeometry, index: int) -> str:
         return color_for_culture(field.cultivation)

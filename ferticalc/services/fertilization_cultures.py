@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from .soil_conditions import SoilConditionSummary
+from .soil_conditions import SoilConditionSummary, clay_class
 
 
 ClasseSolo = Literal["Muito baixo", "Baixo", "Medio", "Alto", "Muito alto"]
@@ -149,7 +149,10 @@ def adubacao_milho(
     cultura_antecedente: CulturaAntecedente,
     teor_mo: float,
     massa_seca_antecedente_t_ha: Optional[float],
-    densidade_plantas_ha: Optional[int] = None,
+    densidade_plantas_ha: Optional[float] = None,
+    argila_classe: Optional[int] = None,
+    ajustar_n_rendimento: bool = False,
+    rotacao_soja: bool = False,
     cultivo: int = 1,
 ) -> dict[str, float]:
     if teor_mo <= 2.5:
@@ -178,7 +181,15 @@ def adubacao_milho(
         n_base *= 1.3
 
     if densidade_plantas_ha and densidade_plantas_ha > 65000:
-        n_base += ((densidade_plantas_ha - 65000) // 5000) * 10
+        n_base += ((densidade_plantas_ha - 65000) / 5000) * 10
+
+    if ajustar_n_rendimento and produtividade_t_ha > 10 and argila_classe:
+        ajuste = {1: 1.2, 2: 1.2, 3: 1.3, 4: 1.4}.get(argila_classe)
+        if ajuste:
+            n_base *= ajuste
+
+    if rotacao_soja:
+        n_base *= 0.8
 
     p_base = TABELAS_PK["milho"]["P"][classe_p][cultivo]
     k_base = TABELAS_PK["milho"]["K"][classe_k][cultivo]
@@ -301,7 +312,9 @@ def requirement_from_summary(
     teor_mo: float,
     teor_s_mg_dm3: float,
     massa_seca_antecedente_t_ha: Optional[float] = None,
-    densidade_plantas_ha: Optional[int] = None,
+    densidade_plantas_ha: Optional[float] = None,
+    ajustar_n_rendimento: bool = False,
+    rotacao_soja: bool = False,
     cultivo: int = 1,
     uso_forrageira: UsoForrageira = "Pastejo",
     produtividade_ms_t_ha: Optional[float] = None,
@@ -312,6 +325,10 @@ def requirement_from_summary(
     classe_k = _classe_from_summary(summary, "K")
 
     notes: list[str] = []
+
+    argila_classe: Optional[int] = None
+    if "ARGILA" in summary.elements:
+        argila_classe = clay_class(summary.elements["ARGILA"].value)
 
     if cultura_key in {"soja"}:
         dados = adubacao_soja(
@@ -333,6 +350,9 @@ def requirement_from_summary(
             teor_mo,
             massa_seca_antecedente_t_ha,
             densidade_plantas_ha=densidade_plantas_ha,
+            argila_classe=argila_classe,
+            ajustar_n_rendimento=ajustar_n_rendimento,
+            rotacao_soja=rotacao_soja,
             cultivo=cultivo,
         )
     elif cultura_key in {"trigo"}:

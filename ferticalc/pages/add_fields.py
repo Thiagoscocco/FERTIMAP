@@ -21,7 +21,7 @@ FIELD_FORM_DEFAULTS = {
     "cultivo": "Soja",
     "cultivo_safra": "1",
     "produtividade": "3",
-    "cultura_antecedente": "Indiferente",
+    "cultura_antecedente": "",
     "producao_cultura_antecedente": "",
     "argila": "13%",
     "ph": "4.7",
@@ -44,6 +44,10 @@ FIELD_FORM_DEFAULTS = {
     "cu": "0.5",
     "b": "0.1",
     "mn": "4",
+    "densidade_plantas_ha": "65000",
+    "ajuste_n_rendimento": "Nao",
+    "rotacao_soja": "Nao",
+    "sistema_cultivo": "Convencional",
 }
 
 NEED_FORM_DEFAULTS = {
@@ -52,7 +56,7 @@ NEED_FORM_DEFAULTS = {
     "cultivo": "Soja",
     "cultivo_safra": "1",
     "produtividade": "3",
-    "cultura_antecedente": "Indiferente",
+    "cultura_antecedente": "",
     "producao_cultura_antecedente": "",
     "argila": "13%",
     "ph": "4.7",
@@ -68,6 +72,10 @@ NEED_FORM_DEFAULTS = {
     "n": "100",
     "p": "160",
     "k": "160",
+    "densidade_plantas_ha": "65000",
+    "ajuste_n_rendimento": "Nao",
+    "rotacao_soja": "Nao",
+    "sistema_cultivo": "Convencional",
 }
 
 SOIL_ANALYSIS_FIELDS = [
@@ -220,7 +228,7 @@ CULTIVO_OPTIONS = (
     "Gramineas de estacao fria",
     "Gramineas de estacao quente",
 )
-ANTECEDENTE_OPTIONS = ("Indiferente", "Graminea", "Leguminosa")
+ANTECEDENTE_OPTIONS = ("Graminea", "Leguminosa")
 SAFRA_OPTIONS = ("1", "2")
 
 
@@ -948,11 +956,13 @@ class BaseFormDialog:
         self.mode = mode
         self.result: FieldFormResult | None = None
         self._entries: dict[str, tk.StringVar] = {}
+        self._widgets: dict[str, tk.Widget] = {}
         self._file_var = tk.StringVar(value="")
         self._form_columns = 3
         self._grid_row = 0
         self._grid_col = 0
         self._form_frame: ttk.Frame | None = None
+        self._density_frame: ttk.Frame | None = None
 
     def show(self) -> FieldFormResult | None:
         self.window = tk.Toplevel(self.master)
@@ -997,7 +1007,18 @@ class BaseFormDialog:
 
         self._add_entry("nome", "Nome do talhao", full_width=True)
         self._add_entry("municipio", "Municipio", full_width=True)
-        self._add_combobox("cultivo", "Cultivo", CULTIVO_OPTIONS, full_width=True)
+        cultivo_widget = self._add_combobox(
+            "cultivo", "Cultivo", CULTIVO_OPTIONS, full_width=True
+        )
+        self._add_density_field()
+        if isinstance(cultivo_widget, ttk.Combobox):
+            cultivo_widget.bind(
+                "<<ComboboxSelected>>",
+                lambda _event: self._toggle_density_field(
+                    self._entries.get("cultivo", tk.StringVar()).get()
+                ),
+            )
+        self._toggle_density_field(self._entries.get("cultivo", tk.StringVar()).get())
         self._add_combobox("cultivo_safra", "Cultivo (1 ou 2)", SAFRA_OPTIONS, full_width=True)
         self._add_entry("produtividade", "Produtividade esperada (t/ha)", full_width=True)
         self._add_combobox(
@@ -1006,6 +1027,7 @@ class BaseFormDialog:
             ANTECEDENTE_OPTIONS,
             full_width=True,
         )
+        self._add_helper_text("Padrao: Graminea (se nao informado).")
         self._add_entry(
             "producao_cultura_antecedente",
             "Producao da cultura antecedente (t/ha)",
@@ -1075,8 +1097,9 @@ class BaseFormDialog:
         entry = self._place_field(label, widget_factory, full_width)
         entry.configure(textvariable=var)
         self._entries[key] = var
+        self._widgets[key] = entry
 
-    def _add_combobox(self, key: str, label: str, values: tuple[str, ...], full_width: bool = False) -> None:
+    def _add_combobox(self, key: str, label: str, values: tuple[str, ...], full_width: bool = False):
         var = tk.StringVar(value=self.defaults.get(key, values[0]))
 
         def widget_factory():
@@ -1089,6 +1112,145 @@ class BaseFormDialog:
 
         widget = self._place_field(label, widget_factory, full_width)
         self._entries[key] = var
+        self._widgets[key] = widget
+        return widget
+
+    def _add_density_field(self) -> None:
+        form = self._form_frame
+        if form is None:
+            raise RuntimeError("Form frame not initialized")
+        columns = self._form_columns * 2
+        var = tk.StringVar(value=self.defaults.get("densidade_plantas_ha", "65000"))
+        self._entries["densidade_plantas_ha"] = var
+        ajuste_var = tk.StringVar(value=self.defaults.get("ajuste_n_rendimento", "Nao"))
+        self._entries["ajuste_n_rendimento"] = ajuste_var
+        rotacao_var = tk.StringVar(value=self.defaults.get("rotacao_soja", "Nao"))
+        self._entries["rotacao_soja"] = rotacao_var
+        sistema_var = tk.StringVar(value=self.defaults.get("sistema_cultivo", "Convencional"))
+        self._entries["sistema_cultivo"] = sistema_var
+        frame = ttk.Frame(form)
+        frame.grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=columns,
+            sticky="ew",
+            pady=(0, 2),
+        )
+        frame.columnconfigure(1, weight=1)
+        ttk.Label(frame, text="Densidade de plantas/ha").grid(
+            row=0,
+            column=0,
+            sticky="w",
+            pady=(8, 2),
+        )
+        entry = ttk.Entry(frame, textvariable=var)
+        entry.grid(
+            row=0,
+            column=1,
+            sticky="ew",
+            pady=(0, 2),
+        )
+        ttk.Label(
+            frame,
+            text="Padrao: 65000 plantas/ha. Informe outro valor se desejar.",
+        ).grid(
+            row=1,
+            column=1,
+            sticky="w",
+            pady=(0, 2),
+        )
+        ttk.Label(
+            frame,
+            text="Ajustar doses de N de acordo com rendimento esperado",
+        ).grid(
+            row=2,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(8, 2),
+        )
+        radio_frame = ttk.Frame(frame)
+        radio_frame.grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 2))
+        ttk.Radiobutton(
+            radio_frame,
+            text="Nao",
+            variable=ajuste_var,
+            value="Nao",
+        ).pack(side="left")
+        ttk.Radiobutton(
+            radio_frame,
+            text="Sim",
+            variable=ajuste_var,
+            value="Sim",
+        ).pack(side="left", padx=(12, 0))
+        ttk.Label(
+            frame,
+            text="Rotacao anual com soja",
+        ).grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(8, 2),
+        )
+        rotacao_frame = ttk.Frame(frame)
+        rotacao_frame.grid(row=5, column=0, columnspan=2, sticky="w", pady=(0, 2))
+        ttk.Radiobutton(
+            rotacao_frame,
+            text="Nao",
+            variable=rotacao_var,
+            value="Nao",
+        ).pack(side="left")
+        ttk.Radiobutton(
+            rotacao_frame,
+            text="Sim",
+            variable=rotacao_var,
+            value="Sim",
+        ).pack(side="left", padx=(12, 0))
+        ttk.Label(
+            frame,
+            text="Sistema de cultivo (milho)",
+        ).grid(
+            row=6,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(8, 2),
+        )
+        sistema_frame = ttk.Frame(frame)
+        sistema_frame.grid(row=7, column=0, columnspan=2, sticky="w", pady=(0, 2))
+        ttk.Radiobutton(
+            sistema_frame,
+            text="Convencional",
+            variable=sistema_var,
+            value="Convencional",
+        ).pack(side="left")
+        ttk.Radiobutton(
+            sistema_frame,
+            text="Plantio direto",
+            variable=sistema_var,
+            value="Plantio direto",
+        ).pack(side="left", padx=(12, 0))
+        self._widgets["densidade_plantas_ha"] = entry
+        self._density_frame = frame
+        self._grid_row += 1
+        self._grid_col = 0
+
+    def _toggle_density_field(self, cultivo: str | None) -> None:
+        if not self._density_frame:
+            return
+        if cultivo and cultivo.strip().lower().startswith("milh"):
+            if not self._entries["densidade_plantas_ha"].get().strip():
+                self._entries["densidade_plantas_ha"].set("65000")
+            if not self._entries["ajuste_n_rendimento"].get().strip():
+                self._entries["ajuste_n_rendimento"].set("Nao")
+            if not self._entries["rotacao_soja"].get().strip():
+                self._entries["rotacao_soja"].set("Nao")
+            if not self._entries["sistema_cultivo"].get().strip():
+                self._entries["sistema_cultivo"].set("Convencional")
+            self._density_frame.grid()
+        else:
+            self._density_frame.grid_remove()
 
     def _place_field(self, label: str, widget_factory, full_width: bool):
         form = self._form_frame
@@ -1156,6 +1318,24 @@ class BaseFormDialog:
         self._grid_row += 1
         self._grid_col = 0
 
+    def _add_helper_text(self, text: str) -> None:
+        form = self._form_frame
+        if form is None:
+            return
+        ttk.Label(
+            form,
+            text=text,
+            foreground="#5f5f5f",
+        ).grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=self._form_columns * 2,
+            sticky="w",
+            pady=(0, 4),
+        )
+        self._grid_row += 1
+        self._grid_col = 0
+
     def _choose_file(self) -> None:
         file_path = filedialog.askopenfilename(
             title="Selecione arquivo KMZ ou KML",
@@ -1181,6 +1361,29 @@ class BaseFormDialog:
             for key, var in self._entries.items()
             if key not in {"nome", "cultivo", "municipio"}
         }
+        antecedente_value = (attributes.get("cultura_antecedente") or "").strip()
+        valid_antecedentes = {value for value in ANTECEDENTE_OPTIONS if value}
+        if antecedente_value and antecedente_value not in valid_antecedentes:
+            messagebox.showwarning(
+                "Cultura antecedente",
+                "Selecione uma cultura antecedente valida (Graminea ou Leguminosa).",
+            )
+            return
+        if not antecedente_value:
+            attributes["cultura_antecedente"] = "Graminea"
+        if not cultivo.strip().lower().startswith("milh"):
+            attributes.pop("densidade_plantas_ha", None)
+            attributes.pop("ajuste_n_rendimento", None)
+            attributes.pop("rotacao_soja", None)
+            attributes.pop("sistema_cultivo", None)
+        elif not attributes.get("densidade_plantas_ha"):
+            attributes["densidade_plantas_ha"] = "65000"
+        if cultivo.strip().lower().startswith("milh") and not attributes.get("ajuste_n_rendimento"):
+            attributes["ajuste_n_rendimento"] = "Nao"
+        if cultivo.strip().lower().startswith("milh") and not attributes.get("rotacao_soja"):
+            attributes["rotacao_soja"] = "Nao"
+        if cultivo.strip().lower().startswith("milh") and not attributes.get("sistema_cultivo"):
+            attributes["sistema_cultivo"] = "Convencional"
         cultura_antecedente = attributes.get("cultura_antecedente", "").strip().lower()
         if cultura_antecedente == "indiferente":
             attributes.pop("producao_cultura_antecedente", None)

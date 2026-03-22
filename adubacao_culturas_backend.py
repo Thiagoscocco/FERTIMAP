@@ -175,7 +175,10 @@ def adubacao_milho(
     cultura_antecedente: CulturaAntecedente,
     teor_mo: float,
     massa_seca_antecedente_t_ha: Optional[float],
-    densidade_plantas_ha: Optional[int] = None,
+    densidade_plantas_ha: Optional[float] = None,
+    argila_classe: Optional[int] = None,
+    ajustar_n_rendimento: bool = False,
+    rotacao_soja: bool = False,
     cultivo: int = 1
 ):
     """
@@ -207,7 +210,15 @@ def adubacao_milho(
 
     # Ajuste por densidade
     if densidade_plantas_ha and densidade_plantas_ha > 65000:
-        n_base += ((densidade_plantas_ha - 65000) // 5000) * 10
+        n_base += ((densidade_plantas_ha - 65000) / 5000) * 10
+
+    if ajustar_n_rendimento and produtividade_t_ha > 10 and argila_classe:
+        ajuste = {1: 1.2, 2: 1.2, 3: 1.3, 4: 1.4}.get(argila_classe)
+        if ajuste:
+            n_base *= ajuste
+
+    if rotacao_soja:
+        n_base *= 0.8
 
     p_base = TABELAS_PK["milho"]["P"][classe_p][cultivo]
     k_base = TABELAS_PK["milho"]["K"][classe_k][cultivo]

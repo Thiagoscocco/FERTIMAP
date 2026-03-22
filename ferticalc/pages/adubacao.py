@@ -5,6 +5,7 @@ Per-field fertilization workflow.
 from __future__ import annotations
 
 from collections.abc import Callable
+import re
 import tkinter as tk
 from tkinter import messagebox, ttk
 
@@ -51,7 +52,7 @@ class AdubacaoPage(AddFieldsPage):
         ("Automatico", IndividualSelection.SOFTWARE),
         ("Usuario", IndividualSelection.USER),
     ]
-    ANTECEDENTE_OPTIONS = ("Indiferente", "Graminea", "Leguminosa")
+    ANTECEDENTE_OPTIONS = ("Graminea", "Leguminosa")
     USO_FORRAGEIRA_OPTIONS = ("Pastejo", "Corte")
     CULTIVO_OPTIONS = ("1", "2")
     NEED_METRIC_LABELS = ("Nitrogenio", "Fosforo", "Potassio", "Enxofre", "Molibdenio")
@@ -396,7 +397,7 @@ class AdubacaoPage(AddFieldsPage):
             cultivo_label = "2º"
         else:
             cultivo_label = str(cultivo_safra)
-        antecedente = meta.get("cultura_antecedente", "Indiferente")
+        antecedente = meta.get("cultura_antecedente", "Graminea (padrao)")
         massa_seca = meta.get("producao_cultura_antecedente", "")
 
         tk.Label(
@@ -790,7 +791,9 @@ class AdubacaoPage(AddFieldsPage):
         massa_seca = self._optional_float(meta.get("producao_cultura_antecedente"))
         if antecedente_label and antecedente_label.lower().startswith("ind"):
             massa_seca = None
-        densidade = None
+        densidade = self._parse_density(meta.get("densidade_plantas_ha"))
+        ajustar_n_rendimento = self._parse_yes(meta.get("ajuste_n_rendimento"))
+        rotacao_soja = self._parse_yes(meta.get("rotacao_soja"))
         cultivo = int(self._optional_float(meta.get("cultivo_safra")) or 1)
         uso_forrageira = state.get("uso_forrageira") or "Pastejo"
         produtividade_ms = self._optional_float(state.get("produtividade_ms_t_ha"))
@@ -805,6 +808,8 @@ class AdubacaoPage(AddFieldsPage):
             teor_s_mg_dm3=teor_s,
             massa_seca_antecedente_t_ha=massa_seca,
             densidade_plantas_ha=densidade,
+            ajustar_n_rendimento=ajustar_n_rendimento,
+            rotacao_soja=rotacao_soja,
             cultivo=cultivo,
             uso_forrageira=uso_forrageira,  # type: ignore[arg-type]
             produtividade_ms_t_ha=produtividade_ms,
@@ -1358,6 +1363,34 @@ class AdubacaoPage(AddFieldsPage):
         if num is None:
             return None
         return int(num)
+
+    @staticmethod
+    def _parse_density(value: object) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        text = str(value).strip().replace(" ", "")
+        if not text:
+            return None
+        if "," in text:
+            text = text.replace(".", "")
+            text = text.replace(",", ".")
+        elif re.match(r"^\\d{1,3}(?:\\.\\d{3})+$", text):
+            text = text.replace(".", "")
+        try:
+            return float(text)
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _parse_yes(value: object) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        text = str(value).strip().lower()
+        return text in {"sim", "s", "yes", "y", "true", "1"}
 
     @staticmethod
     def _require_float(value: object, label: str) -> float:
