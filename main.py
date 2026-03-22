@@ -1,5 +1,3 @@
-"""Entry point for the FertiCalc UI prototype."""
-
 from ui.main_window import FerticalcApp
 
 
