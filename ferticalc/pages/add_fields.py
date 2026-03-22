@@ -346,6 +346,7 @@ class AddFieldsPage(BasePage):
         self._dragging = False
         self._world_origin: tuple[float, float] | None = None
         self._world_scale: float | None = None
+        self._map_hidden_key = "_hide_on_map"
 
     def build(self) -> None:
         self.style = ttk.Style()
@@ -867,6 +868,8 @@ class AddFieldsPage(BasePage):
         for index, (field, world_points) in enumerate(
             zip(self.fields, world_points_by_field)
         ):
+            if self._is_field_hidden(field):
+                continue
             if not field.coordinates or not world_points:
                 continue
             projected = [
@@ -909,6 +912,23 @@ class AddFieldsPage(BasePage):
             )
 
         self._render_canvas_overlays(width, height)
+
+    def _is_field_hidden(self, field: FieldGeometry) -> bool:
+        meta = field.metadata or {}
+        return bool(meta.get(self._map_hidden_key))
+
+    def _toggle_field_hidden(self, index: int) -> str:
+        if index < 0 or index >= len(self.fields):
+            return "break"
+        field = self.fields[index]
+        if field.metadata is None:
+            field.metadata = {}
+        current = bool(field.metadata.get(self._map_hidden_key))
+        field.metadata[self._map_hidden_key] = not current
+        self._render_fields()
+        if hasattr(self, "_refresh_field_cards"):
+            self._refresh_field_cards()
+        return "break"
 
     def _field_color(self, field: FieldGeometry, index: int) -> str:
         return self.FIELD_COLORS[index % len(self.FIELD_COLORS)]
@@ -1040,6 +1060,7 @@ class BaseFormDialog:
         self._grid_col = 0
         self._form_frame: ttk.Frame | None = None
         self._density_frame: ttk.Frame | None = None
+        self._antecedente_frame: ttk.Frame | None = None
 
     def show(self) -> FieldFormResult | None:
         self.window = tk.Toplevel(self.master)
@@ -1095,21 +1116,17 @@ class BaseFormDialog:
                     self._entries.get("cultivo", tk.StringVar()).get()
                 ),
             )
+            cultivo_widget.bind(
+                "<<ComboboxSelected>>",
+                lambda _event: self._toggle_antecedente_fields(
+                    self._entries.get("cultivo", tk.StringVar()).get()
+                ),
+            )
         self._toggle_density_field(self._entries.get("cultivo", tk.StringVar()).get())
+        self._add_antecedente_fields()
+        self._toggle_antecedente_fields(self._entries.get("cultivo", tk.StringVar()).get())
         self._add_combobox("cultivo_safra", "Cultivo (1 ou 2)", SAFRA_OPTIONS, full_width=True)
         self._add_entry("produtividade", "Produtividade esperada (t/ha)", full_width=True)
-        self._add_combobox(
-            "cultura_antecedente",
-            "Cultura antecedente",
-            ANTECEDENTE_OPTIONS,
-            full_width=True,
-        )
-        self._add_helper_text("Padrao: Graminea (se nao informado).")
-        self._add_entry(
-            "producao_cultura_antecedente",
-            "Producao da cultura antecedente (t/ha)",
-            full_width=True,
-        )
 
         for title, fields in self.sections:
             self._add_separator(title)
@@ -1328,6 +1345,65 @@ class BaseFormDialog:
             self._density_frame.grid()
         else:
             self._density_frame.grid_remove()
+
+    def _add_antecedente_fields(self) -> None:
+        form = self._form_frame
+        if form is None:
+            raise RuntimeError("Form frame not initialized")
+        columns = self._form_columns * 2
+        frame = ttk.Frame(form)
+        frame.grid(
+            row=self._grid_row,
+            column=0,
+            columnspan=columns,
+            sticky="ew",
+            pady=(8, 2),
+        )
+        frame.columnconfigure(0, weight=1)
+        self._grid_row += 1
+
+        antecedente_var = tk.StringVar(
+            value=self.defaults.get("cultura_antecedente", ANTECEDENTE_OPTIONS[0])
+        )
+        self._entries["cultura_antecedente"] = antecedente_var
+        ttk.Label(frame, text="Cultura antecedente").grid(row=0, column=0, sticky="w")
+        antecedente_combo = ttk.Combobox(
+            frame,
+            textvariable=antecedente_var,
+            values=ANTECEDENTE_OPTIONS,
+            state="readonly",
+        )
+        antecedente_combo.grid(row=1, column=0, sticky="ew", pady=(0, 2))
+        self._widgets["cultura_antecedente"] = antecedente_combo
+
+        ttk.Label(
+            frame,
+            text="Padrao: Graminea (se nao informado).",
+            foreground="#5f5f5f",
+        ).grid(row=2, column=0, sticky="w", pady=(0, 4))
+
+        producao_var = tk.StringVar(
+            value=self.defaults.get("producao_cultura_antecedente", "")
+        )
+        self._entries["producao_cultura_antecedente"] = producao_var
+        ttk.Label(
+            frame,
+            text="Producao da cultura antecedente (t/ha)",
+        ).grid(row=3, column=0, sticky="w")
+        producao_entry = ttk.Entry(frame, textvariable=producao_var)
+        producao_entry.grid(row=4, column=0, sticky="ew", pady=(0, 2))
+        self._widgets["producao_cultura_antecedente"] = producao_entry
+
+        self._antecedente_frame = frame
+
+    def _toggle_antecedente_fields(self, cultivo: str) -> None:
+        if self._antecedente_frame is None:
+            return
+        texto = (cultivo or "").strip().lower()
+        if texto == "soja":
+            self._antecedente_frame.grid_remove()
+        else:
+            self._antecedente_frame.grid()
 
     def _place_field(self, label: str, widget_factory, full_width: bool):
         form = self._form_frame

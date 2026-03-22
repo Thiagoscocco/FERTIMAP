@@ -109,8 +109,19 @@ _NITROGENADO_POR_NORMALIZED = {
 }
 NITROGENADOS_CHOICES: Tuple[str, ...] = tuple(item.nome for item in _NITROGENADOS_SEQ)
 
+_MOLIBDATOS_SEQ: Tuple[Fertilizante, ...] = (
+    Fertilizante("MOL_NA", "Molibdato de sodio (Mo) - 39%", mo=0.39),
+    Fertilizante("MOL_AM", "Molibdato de amonio (Mo) - 54%", mo=0.54),
+)
+MOLIBDATOS: Dict[str, Fertilizante] = {item.codigo: item for item in _MOLIBDATOS_SEQ}
+_MOLIBDATO_POR_NOME = {item.nome: item for item in _MOLIBDATOS_SEQ}
+_MOLIBDATO_POR_NORMALIZED = {
+    _normalize_name(item.nome): item for item in _MOLIBDATOS_SEQ
+}
+MOLIBDATOS_CHOICES: Tuple[str, ...] = tuple(item.nome for item in _MOLIBDATOS_SEQ)
+
 GESSO_PADRAO = Fertilizante("GESSO", "Gesso agricola", s=0.17)
-MOLIBDATO_PADRAO = Fertilizante("MOLIBDATO", "Molibdato de sodio (Mo)", mo=0.39)
+MOLIBDATO_PADRAO = MOLIBDATOS["MOL_NA"]
 
 FORMULADO_COMPLEMENTO_P = FOSFATADOS["TSP"]
 FORMULADO_COMPLEMENTO_K = POTASSICOS["KCl"]
@@ -147,6 +158,13 @@ def obter_nitrogenado_por_nome(nome: str | None) -> Fertilizante | None:
     return _NITROGENADO_POR_NOME.get(nome) or _NITROGENADO_POR_NORMALIZED.get(
         chave
     )
+
+
+def obter_molibdato_por_nome(nome: str | None) -> Fertilizante | None:
+    if not nome:
+        return None
+    chave = _normalize_name(nome)
+    return _MOLIBDATO_POR_NOME.get(nome) or _MOLIBDATO_POR_NORMALIZED.get(chave)
 
 
 def format_formulated_name(grade: Dict[str, float], default: str = "Formulado") -> str:
@@ -198,14 +216,16 @@ def _complementar_molibdenio(
     restante_mo: float,
     produtos: List[Tuple[str, float]],
     individuais: List[Tuple[str, float]],
+    fonte_mo: Fertilizante | None = None,
 ) -> float:
     if restante_mo <= 0:
         return 0.0
-    if MOLIBDATO_PADRAO.mo <= 0:
+    fonte = fonte_mo or MOLIBDATO_PADRAO
+    if fonte.mo <= 0:
         raise ValueError("Fertilizante padrao de molibdenio invalido.")
-    kg = restante_mo / MOLIBDATO_PADRAO.mo
-    _adicionar_produto(produtos, MOLIBDATO_PADRAO.nome, kg)
-    _adicionar_produto(individuais, MOLIBDATO_PADRAO.nome, kg)
+    kg = restante_mo / fonte.mo
+    _adicionar_produto(produtos, fonte.nome, kg)
+    _adicionar_produto(individuais, fonte.nome, kg)
     return kg
 
 
@@ -217,6 +237,7 @@ def calcular_formulado(
     complemento_n: Fertilizante | None = None,
     complemento_p: Fertilizante | None = None,
     complemento_k: Fertilizante | None = None,
+    complemento_mo: Fertilizante | None = None,
     kg_formulado_predefinido: float | None = None,
 ) -> FertilizacaoResultado:
     """Calculate formulated fertilizer + complements."""
@@ -307,7 +328,7 @@ def calcular_formulado(
             mo_req = _subtrair_fornecido(mo_req, kg_n, fert_n.mo)
 
     _complementar_enxofre(s_req, produtos, individuais)
-    _complementar_molibdenio(mo_req, produtos, individuais)
+    _complementar_molibdenio(mo_req, produtos, individuais, complemento_mo)
 
     return FertilizacaoResultado(
         produtos=produtos,
@@ -323,6 +344,7 @@ def calcular_individual_usuario(
     fosfatado_codigo: str | None,
     potassico_codigo: str | None,
     nitrogenado_codigo: str | None,
+    molibdato_codigo: str | None = None,
 ) -> FertilizacaoResultado:
     """Individual fertilizers selected by the user."""
 
@@ -405,7 +427,9 @@ def calcular_individual_usuario(
         alertas.append("Nenhuma necessidade de N foi informada.")
 
     _complementar_enxofre(s_req, produtos, individuais)
-    _complementar_molibdenio(mo_req, produtos, individuais)
+    _complementar_molibdenio(
+        mo_req, produtos, individuais, MOLIBDATOS.get(molibdato_codigo or "")
+    )
 
     return FertilizacaoResultado(
         produtos=produtos,
@@ -415,7 +439,9 @@ def calcular_individual_usuario(
     )
 
 
-def calcular_individual_software(demanda: Dict[str, float]) -> FertilizacaoResultado:
+def calcular_individual_software(
+    demanda: Dict[str, float], molibdato_codigo: str | None = None
+) -> FertilizacaoResultado:
     """Automatic fertilizer selection used by the software."""
 
     produtos: List[Tuple[str, float]] = []
@@ -468,7 +494,9 @@ def calcular_individual_software(demanda: Dict[str, float]) -> FertilizacaoResul
         mo_req = _subtrair_fornecido(mo_req, kg_n, fert_n.mo)
 
     _complementar_enxofre(s_req, produtos, individuais)
-    _complementar_molibdenio(mo_req, produtos, individuais)
+    _complementar_molibdenio(
+        mo_req, produtos, individuais, MOLIBDATOS.get(molibdato_codigo or "")
+    )
 
     return FertilizacaoResultado(
         produtos=produtos,
@@ -497,6 +525,7 @@ def calculate_fertilizers(
     fosfatado_codigo: Optional[str] = None,
     potassico_codigo: Optional[str] = None,
     nitrogenado_codigo: Optional[str] = None,
+    molibdato_codigo: Optional[str] = None,
     mixed_sacks: Optional[float] = None,
     individual_selection: IndividualSelection = IndividualSelection.USER,
 ) -> FertilizerResult:
@@ -522,14 +551,21 @@ def calculate_fertilizers(
                 complemento_n=NITROGENADOS.get(nitrogenado_codigo or ""),
                 complemento_p=FOSFATADOS.get(fosfatado_codigo or ""),
                 complemento_k=POTASSICOS.get(potassico_codigo or ""),
+                complemento_mo=MOLIBDATOS.get(molibdato_codigo or ""),
             )
             mode_label = "Fertilizantes formulados"
         elif mode is FertilizationMode.INDIVIDUAL:
             if individual_selection is IndividualSelection.SOFTWARE:
-                resultado = calcular_individual_software(demanda)
+                resultado = calcular_individual_software(
+                    demanda, molibdato_codigo=molibdato_codigo
+                )
             else:
                 resultado = calcular_individual_usuario(
-                    demanda, fosfatado_codigo, potassico_codigo, nitrogenado_codigo
+                    demanda,
+                    fosfatado_codigo,
+                    potassico_codigo,
+                    nitrogenado_codigo,
+                    molibdato_codigo=molibdato_codigo,
                 )
             mode_label = "Fertilizantes individuais"
         elif mode is FertilizationMode.MIXED:
@@ -557,6 +593,7 @@ def calculate_fertilizers(
                 complemento_n=NITROGENADOS.get(nitrogenado_codigo or ""),
                 complemento_p=FOSFATADOS.get(fosfatado_codigo or ""),
                 complemento_k=POTASSICOS.get(potassico_codigo or ""),
+                complemento_mo=MOLIBDATOS.get(molibdato_codigo or ""),
                 kg_formulado_predefinido=kg_formulado,
             )
             mode_label = "Plano misto"

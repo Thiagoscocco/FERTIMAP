@@ -153,6 +153,7 @@ class CalagemPage(AddFieldsPage):
                 font=self.CARD_TITLE_FONT,
                 **text_kwargs,
             ).pack(side="left", anchor="w")
+            hidden = self._is_field_hidden(field)
             toggle_label = tk.Label(
                 header,
                 text="-" if expanded else "+",
@@ -166,6 +167,22 @@ class CalagemPage(AddFieldsPage):
             toggle_label.bind(
                 "<Button-1>",
                 lambda event, idx=index: self._handle_toggle_click(idx),
+            )
+            map_label = tk.Label(
+                header,
+                text="M",
+                bg=color,
+                fg="#b03a2e" if hidden else self._text_fg,
+                font=("Segoe UI", 11, "bold"),
+                cursor="hand2",
+                padx=6,
+            )
+            if hidden:
+                map_label.configure(relief="solid", bd=1)
+            map_label.pack(side="right")
+            map_label.bind(
+                "<Button-1>",
+                lambda event, idx=index: self._toggle_field_hidden(idx),
             )
             result_available = bool(field.metadata and field.metadata.get("_calagem_result"))
             if result_available:

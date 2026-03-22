@@ -236,6 +236,10 @@ def adubacao_soja(
     classe_k: ClasseSolo,
     produtividade_t_ha: float,
     teor_s_mg_dm3: float,
+    teor_mo_percent: Optional[float] = None,
+    ph_agua: Optional[float] = None,
+    argila_classe: Optional[int] = None,
+    metodo_aplicacao_mo: str = "foliar",
     cultivo: int = 1
 ):
     """
@@ -251,13 +255,32 @@ def adubacao_soja(
         k_base += 25 * (produtividade_t_ha - 3)
 
     s = 20 if teor_s_mg_dm3 < 10 else 0
+    mo = 0.0
+    metodo = (metodo_aplicacao_mo or "foliar").strip().lower()
+    if metodo not in {"foliar", "semente"}:
+        metodo = "foliar"
+
+    if (
+        cultivo == 1
+        and teor_mo_percent is not None
+        and ph_agua is not None
+        and ph_agua < 5.5
+    ):
+        if teor_mo_percent <= 2.5:
+            mo = 0.050 if metodo == "foliar" else 0.025
+        elif teor_mo_percent <= 5.0:
+            mo = 0.025 if metodo == "foliar" else 0.012
+
+    if mo > 0 and argila_classe == 4:
+        mo *= 1.4
 
     return {
         "N": 0,
         "P2O5": p_base,
         "K2O": k_base,
         "S": s,
-        "Micros": "Aplicar apenas se deficiência comprovada (Mo conforme pH<5,5)"
+        "Mo": mo,
+        "Micros": "Aplicar Mo foliar entre 30 e 45 dias apos emergencia (quando aplicavel)."
     }
 
 

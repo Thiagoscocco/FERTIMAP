@@ -15,6 +15,7 @@ from .soil_conditions import SoilConditionSummary, clay_class
 ClasseSolo = Literal["Muito baixo", "Baixo", "Medio", "Alto", "Muito alto"]
 CulturaAntecedente = Literal["Leguminosa", "Graminea", "Pousio", "Consorcio"]
 UsoForrageira = Literal["Pastejo", "Corte"]
+MetodoAplicacaoMo = Literal["foliar", "semente"]
 
 
 TABELAS_PK = {
@@ -203,6 +204,10 @@ def adubacao_soja(
     classe_k: ClasseSolo,
     produtividade_t_ha: float,
     teor_s_mg_dm3: float,
+    teor_mo_percent: float,
+    ph_agua: Optional[float],
+    argila_classe: Optional[int],
+    metodo_aplicacao_mo: MetodoAplicacaoMo = "foliar",
     cultivo: int = 1,
 ) -> dict[str, float]:
     p_base = TABELAS_PK["soja"]["P"][classe_p][cultivo]
@@ -213,8 +218,23 @@ def adubacao_soja(
         k_base += 25 * (produtividade_t_ha - 3)
 
     s = 20 if teor_s_mg_dm3 < 10 else 0
+    mo = 0.0
+    metodo = (metodo_aplicacao_mo or "foliar").strip().lower()
+    if metodo not in {"foliar", "semente"}:
+        metodo = "foliar"
 
-    return {"N": 0, "P2O5": p_base, "K2O": k_base, "S": s}
+    # Mo para soja: 1o cultivo + MO baixa/media + pH < 5.5.
+    if cultivo == 1 and ph_agua is not None and ph_agua < 5.5:
+        if teor_mo_percent <= 2.5:
+            mo = 0.050 if metodo == "foliar" else 0.025
+        elif teor_mo_percent <= 5.0:
+            mo = 0.025 if metodo == "foliar" else 0.012
+
+    # Solo arenoso (classe 4): aumentar dose em 40%.
+    if mo > 0 and argila_classe == 4:
+        mo *= 1.4
+
+    return {"N": 0, "P2O5": p_base, "K2O": k_base, "S": s, "Mo": mo}
 
 
 def adubacao_trigo(
@@ -316,6 +336,7 @@ def requirement_from_summary(
     uso_forrageira: UsoForrageira = "Pastejo",
     produtividade_ms_t_ha: Optional[float] = None,
     ph_agua: Optional[float] = None,
+    metodo_aplicacao_mo: MetodoAplicacaoMo = "foliar",
 ) -> CultureRequirement:
     cultura_key = cultura.strip().lower()
     classe_p = _classe_from_summary(summary, "P")
@@ -333,11 +354,16 @@ def requirement_from_summary(
             classe_k,
             produtividade_t_ha,
             teor_s_mg_dm3,
+            teor_mo,
+            ph_agua,
+            argila_classe,
+            metodo_aplicacao_mo=metodo_aplicacao_mo,
             cultivo=cultivo,
         )
-        notes.append(
-            "Aplicar apenas se deficiencia comprovada (Mo conforme pH < 5,5)."
-        )
+        if float(dados.get("Mo", 0.0)) > 0 and metodo_aplicacao_mo == "foliar":
+            notes.append(
+                "Aplicacao foliar de Mo: realizar entre 30 e 45 dias apos a emergencia."
+            )
     elif cultura_key in {"milho"}:
         dados = adubacao_milho(
             classe_p,

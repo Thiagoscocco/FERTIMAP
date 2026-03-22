@@ -11,9 +11,11 @@ from tkinter import messagebox, ttk
 
 from ..services.fertilization import (
     FOSFATADOS,
+    MOLIBDATOS,
     NITROGENADOS,
     POTASSICOS,
     FOSFATADOS_CHOICES,
+    MOLIBDATOS_CHOICES,
     NITROGENADOS_CHOICES,
     POTASSICOS_CHOICES,
     FertilizationMode,
@@ -22,6 +24,7 @@ from ..services.fertilization import (
     calculate_fertilizers,
     format_formulated_name,
     obter_fosfatado_por_nome,
+    obter_molibdato_por_nome,
     obter_potassico_por_nome,
     obter_nitrogenado_por_nome,
 )
@@ -55,6 +58,7 @@ class AdubacaoPage(AddFieldsPage):
     ANTECEDENTE_OPTIONS = ("Graminea", "Leguminosa")
     USO_FORRAGEIRA_OPTIONS = ("Pastejo", "Corte")
     CULTIVO_OPTIONS = ("1", "2")
+    MO_APPLICATION_OPTIONS = ("Foliar", "Semente")
     NEED_METRIC_LABELS = ("Nitrogenio", "Fosforo", "Potassio", "Enxofre", "Molibdenio")
     EMPTY_OPTION = "Vazio"
     DOSE_METRIC_OPTIONS = ("Dose", "Total no talhao")
@@ -290,6 +294,7 @@ class AdubacaoPage(AddFieldsPage):
                 font=self.CARD_TITLE_FONT,
                 **text_kwargs,
             ).pack(side="left", anchor="w")
+            hidden = self._is_field_hidden(field)
             toggle_label = tk.Label(
                 header,
                 text="-" if expanded else "+",
@@ -303,6 +308,22 @@ class AdubacaoPage(AddFieldsPage):
             toggle_label.bind(
                 "<Button-1>",
                 lambda event, idx=index: self._handle_toggle_click(idx),
+            )
+            map_label = tk.Label(
+                header,
+                text="M",
+                bg=color,
+                fg="#b03a2e" if hidden else self._text_fg,
+                font=("Segoe UI", 11, "bold"),
+                cursor="hand2",
+                padx=6,
+            )
+            if hidden:
+                map_label.configure(relief="solid", bd=1)
+            map_label.pack(side="right")
+            map_label.bind(
+                "<Button-1>",
+                lambda event, idx=index: self._toggle_field_hidden(idx),
             )
             crop_name = field.cultivation or "Nao informado"
             tk.Label(
@@ -369,7 +390,7 @@ class AdubacaoPage(AddFieldsPage):
 
             self._render_form_fields(inputs, form_fields)
             self._render_culture_section(form, field, state)
-            self._render_mode_specific_form(form, state)
+            self._render_mode_specific_form(form, state, field)
 
             missing_fields = self._missing_soil_fields(field, state)
             if missing_fields:
@@ -460,6 +481,48 @@ class AdubacaoPage(AddFieldsPage):
                     text=f"Massa seca antecedente: {massa_seca} t/ha",
                     anchor="w",
                 ).pack(anchor="w")
+        else:
+            rows = ttk.Frame(frame)
+            rows.pack(fill="x", pady=(6, 0))
+            metodo_var = tk.StringVar(
+                value=state.get("mo_aplicacao") or self.MO_APPLICATION_OPTIONS[0]
+            )
+            self._bind_var(state, "mo_aplicacao", metodo_var)
+            molibdato_var = tk.StringVar(
+                value=state.get("molibdato") or MOLIBDATOS_CHOICES[0]
+            )
+            self._bind_var(state, "molibdato", molibdato_var)
+            self._render_form_fields(
+                rows,
+                [
+                    (
+                        "Aplicacao de Mo",
+                        lambda master, var=metodo_var: ttk.Combobox(
+                            master,
+                            state="readonly",
+                            values=self.MO_APPLICATION_OPTIONS,
+                            textvariable=var,
+                            width=12,
+                        ),
+                        1,
+                    ),
+                    (
+                        "Fonte de Mo",
+                        lambda master, var=molibdato_var: ttk.Combobox(
+                            master,
+                            state="readonly",
+                            values=MOLIBDATOS_CHOICES,
+                            textvariable=var,
+                            width=24,
+                        ),
+                        1,
+                    ),
+                ],
+            )
+            ttk.Label(
+                frame,
+                text="Foliar: aplicar entre 30 e 45 dias apos a emergencia.",
+            ).pack(anchor="w", pady=(4, 0))
 
         if "gramineas" in cultura_lower:
             rows = ttk.Frame(frame)
@@ -492,12 +555,14 @@ class AdubacaoPage(AddFieldsPage):
                 ],
             )
 
-    def _render_mode_specific_form(self, parent, state: dict) -> None:
+    def _render_mode_specific_form(self, parent, state: dict, field: FieldGeometry) -> None:
         mode = self._resolve_mode(state.get("mode"))
         frame = ttk.LabelFrame(parent, text="Configuracao da adubacao", padding=(10, 6))
         frame.pack(fill="x", pady=(8, 0))
         rows = ttk.Frame(frame)
         rows.pack(fill="x")
+        cultura_lower = (field.cultivation or "").strip().lower()
+        hide_nitrogen = cultura_lower == "soja"
 
         fields: list[tuple[str, Callable[[ttk.Frame], ttk.Widget], int]] = []
         if mode is FertilizationMode.INDIVIDUAL:
@@ -519,7 +584,7 @@ class AdubacaoPage(AddFieldsPage):
             self._render_form_fields(rows, fields)
 
             if self._resolve_individual_source(state.get("individual_source")) is IndividualSelection.USER:
-                self._render_fertilizer_choices(frame, state)
+                self._render_fertilizer_choices(frame, state, hide_nitrogen=hide_nitrogen)
             return
 
         if mode in {FertilizationMode.FORMULATED, FertilizationMode.MIXED}:
@@ -533,34 +598,41 @@ class AdubacaoPage(AddFieldsPage):
                     ),
                     2,
                 ),
-                (
-                    "N (%)",
-                    lambda master: ttk.Entry(
-                        master,
-                        textvariable=self._ensure_var(state, "formulado_n"),
-                        width=8,
-                    ),
-                    1,
-                ),
-                (
-                    "P2O5 (%)",
-                    lambda master: ttk.Entry(
-                        master,
-                        textvariable=self._ensure_var(state, "formulado_p"),
-                        width=8,
-                    ),
-                    1,
-                ),
-                (
-                    "K2O (%)",
-                    lambda master: ttk.Entry(
-                        master,
-                        textvariable=self._ensure_var(state, "formulado_k"),
-                        width=8,
-                    ),
-                    1,
-                ),
             ]
+            if not hide_nitrogen:
+                fields.append(
+                    (
+                        "N (%)",
+                        lambda master: ttk.Entry(
+                            master,
+                            textvariable=self._ensure_var(state, "formulado_n"),
+                            width=8,
+                        ),
+                        1,
+                    )
+                )
+            fields.extend(
+                [
+                    (
+                        "P2O5 (%)",
+                        lambda master: ttk.Entry(
+                            master,
+                            textvariable=self._ensure_var(state, "formulado_p"),
+                            width=8,
+                        ),
+                        1,
+                    ),
+                    (
+                        "K2O (%)",
+                        lambda master: ttk.Entry(
+                            master,
+                            textvariable=self._ensure_var(state, "formulado_k"),
+                            width=8,
+                        ),
+                        1,
+                    ),
+                ]
+            )
             if mode is FertilizationMode.MIXED:
                 fields.append(
                     (
@@ -574,9 +646,11 @@ class AdubacaoPage(AddFieldsPage):
                     )
                 )
             self._render_form_fields(rows, fields)
-            self._render_fertilizer_choices(frame, state, allow_optional=True)
+            self._render_fertilizer_choices(
+                frame, state, allow_optional=True, hide_nitrogen=hide_nitrogen
+            )
     def _render_fertilizer_choices(
-        self, parent, state: dict, allow_optional: bool = False
+        self, parent, state: dict, allow_optional: bool = False, hide_nitrogen: bool = False
     ) -> None:
         choices = ttk.Frame(parent)
         choices.pack(fill="x", pady=(6, 0))
@@ -605,13 +679,12 @@ class AdubacaoPage(AddFieldsPage):
             pot_values = ("",) + pot_values
             nit_values = ("",) + nit_values
 
-        form_fields.extend(
-            [
-                ("Fosfatado", _combo(fos_values, "fosfatado", fos_default), 1),
-                ("Potassico", _combo(pot_values, "potassico", pot_default), 1),
-                ("Nitrogenado", _combo(nit_values, "nitrogenado", nit_default), 1),
-            ]
-        )
+        form_fields.append(("Fosfatado", _combo(fos_values, "fosfatado", fos_default), 1))
+        form_fields.append(("Potassico", _combo(pot_values, "potassico", pot_default), 1))
+        if not hide_nitrogen:
+            form_fields.append(
+                ("Nitrogenado", _combo(nit_values, "nitrogenado", nit_default), 1)
+            )
         self._render_form_fields(choices, form_fields)
 
     def _render_result_section(self, card, result, text_kwargs) -> None:
@@ -756,6 +829,8 @@ class AdubacaoPage(AddFieldsPage):
             "fosfatado": storage.get("fosfatado") or "",
             "potassico": storage.get("potassico") or "",
             "nitrogenado": storage.get("nitrogenado") or "",
+            "molibdato": storage.get("molibdato") or MOLIBDATOS_CHOICES[0],
+            "mo_aplicacao": storage.get("mo_aplicacao") or self.MO_APPLICATION_OPTIONS[0],
             "produtividade_ms_t_ha": storage.get("produtividade_ms_t_ha") or "",
             "massa_seca_antecedente": storage.get("massa_seca_antecedente") or "",
         }
@@ -834,6 +909,7 @@ class AdubacaoPage(AddFieldsPage):
         uso_forrageira = state.get("uso_forrageira") or "Pastejo"
         produtividade_ms = self._optional_float(state.get("produtividade_ms_t_ha"))
         ph_agua = self._optional_float(merged.get("ph"))
+        metodo_aplicacao_mo = self._resolve_mo_application(state.get("mo_aplicacao"))
 
         cultura_req = requirement_from_summary(
             cultura,
@@ -850,6 +926,7 @@ class AdubacaoPage(AddFieldsPage):
             uso_forrageira=uso_forrageira,  # type: ignore[arg-type]
             produtividade_ms_t_ha=produtividade_ms,
             ph_agua=ph_agua,
+            metodo_aplicacao_mo=metodo_aplicacao_mo,
         )
         requirement = FertilizerRequirement(
             cultura_req.n_kg_ha,
@@ -867,6 +944,7 @@ class AdubacaoPage(AddFieldsPage):
         fos = self._fertilizante_codigo(state.get("fosfatado"), obter_fosfatado_por_nome, FOSFATADOS)
         pot = self._fertilizante_codigo(state.get("potassico"), obter_potassico_por_nome, POTASSICOS)
         nit = self._fertilizante_codigo(state.get("nitrogenado"), obter_nitrogenado_por_nome, NITROGENADOS)
+        mol = self._fertilizante_codigo(state.get("molibdato"), obter_molibdato_por_nome, MOLIBDATOS)
 
         if mode is FertilizationMode.INDIVIDUAL:
             selection = self._resolve_individual_source(state.get("individual_source"))
@@ -876,6 +954,7 @@ class AdubacaoPage(AddFieldsPage):
                 fosfatado_codigo=fos,
                 potassico_codigo=pot,
                 nitrogenado_codigo=nit,
+                molibdato_codigo=mol,
                 individual_selection=selection,
             )
 
@@ -893,6 +972,7 @@ class AdubacaoPage(AddFieldsPage):
                 fosfatado_codigo=fos,
                 potassico_codigo=pot,
                 nitrogenado_codigo=nit,
+                molibdato_codigo=mol,
                 mixed_sacks=sacos,
             )
 
@@ -1533,6 +1613,15 @@ class AdubacaoPage(AddFieldsPage):
             if text == label:
                 return mode
         return IndividualSelection.SOFTWARE
+
+    @staticmethod
+    def _resolve_mo_application(label: str | None) -> str:
+        if not label:
+            return "foliar"
+        norm = label.strip().lower()
+        if norm.startswith("sem"):
+            return "semente"
+        return "foliar"
 
     @staticmethod
     def _fertilizante_codigo(
