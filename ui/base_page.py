@@ -13,8 +13,8 @@ class BasePage(ABC):
 
     @abstractmethod
     def build(self) -> None:
-        """Create widgets inside ``self.parent``."""
+        """"""
 
     def refresh(self) -> None:
-        """Hook called when the tab becomes visible."""
+        """"""
         return

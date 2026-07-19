@@ -96,8 +96,8 @@ def _classe_from_summary(summary: SoilConditionSummary, key: str) -> ClasseSolo:
     clazz = elem.clazz.strip().capitalize()
     if clazz == "Medio":
         return "Medio"
-    return clazz  # "Muito baixo", "Baixo", "Alto", "Muito alto"
-
+    return clazz
+    
 
 def _value_from_summary(summary: SoilConditionSummary, key: str) -> float:
     elem = summary.elements.get(key)

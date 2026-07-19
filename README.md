@@ -1,22 +1,35 @@
-# FertiCalc
+# FertiMap
 
-Prototipo inicial do FertiCalc em TkBootstrap inspirado no layout do EasyIOP.
+Aplicativo desktop em Python com TkBootstrap para carregar talhoes via KMZ/KML, visualizar mapas e apoiar rotinas de manejo como cultivos, condicoes do solo, calagem e adubacao.
 
-## Estrutura
+## Funcionalidades atuais
 
-- `main.py` - ponto de entrada que inicia a aplicacao TkBootstrap.
-- `ui/main_window.py` - shell principal com o `Notebook` que hospeda cada aba.
-- `ui/base_page.py` - contrato simples para todas as abas.
-- `pages/add_fields.py` - primeira aba ("Adicionar talhoes") com canvas a esquerda e painel lateral a direita.
-- `processing/kmz_loader.py` - leitura de arquivos KMZ/KML e extracao de poligonos.
+- Importacao de talhoes a partir de arquivos `.kmz` e `.kml`.
+- Visualizacao dos poligonos em canvas com selecao e destaque por talhao.
+- Cadastro e edicao de atributos agronomicos por area.
+- Abas dedicadas para `Cultivos`, `Condicoes do solo`, `Calagem` e `Adubacao`.
+- Calculos auxiliares de recomendacao com base nos dados preenchidos no app.
+- Bootstrap automatico de ambiente local quando as dependencias nao estao instaladas.
 
-Cada nova aba principal deve ganhar um modulo em `pages/` e ser registrada em `ui/main_window.py`.
+## Estrutura do projeto
 
-## Preparacao
+- `main.py` - ponto de entrada e rotina de bootstrap da execucao.
+- `ui/main_window.py` - janela principal e registro das abas.
+- `ui/base_page.py` - comportamento base compartilhado entre as paginas.
+- `pages/` - telas principais da aplicacao.
+- `processing/` - regras de negocio, leitura de arquivos e calculos agronomicos.
+
+## Requisitos
+
+- Python 3.11 ou superior.
+
+## Instalacao
 
 ```bash
 pip install -r requirements.txt
 ```
+
+Se preferir, voce tambem pode apenas executar o projeto. Quando `ttkbootstrap` nao estiver disponivel, o app cria uma `.venv-local`, instala as dependencias e reinicia automaticamente usando esse ambiente.
 
 ## Execucao
 
@@ -24,4 +37,10 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Na aba "Adicionar talhoes" clique em **Carregar KMZ / KML**, selecione um ou varios arquivos e os contornos aparecem automaticamente no canvas. O painel lateral lista os talhoes carregados e destaca o desenho quando voce seleciona uma linha. Essa base fornece o padrao para adicionar novas abas e funcionalidades com o avanco do projeto.
+## Fluxo basico de uso
+
+1. Abra a aba `Adicionar talhoes`.
+2. Clique em `Carregar KMZ / KML` para importar um ou mais arquivos.
+3. Revise os talhoes no mapa e no painel lateral.
+4. Complete os dados agronomicos de cada area.
+5. Navegue pelas abas de `Cultivos`, `Condicoes do solo`, `Calagem` e `Adubacao` para visualizar e configurar os resultados.
